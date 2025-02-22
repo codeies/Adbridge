@@ -21,7 +21,7 @@ class WPViteReact
         add_action('admin_menu', [$this, 'adminMenu']);
         add_filter('script_loader_tag', [$this, 'loadScriptAsModule'], 10, 3);
         add_filter('script_loader_tag', [$this, 'loadScriptAsModuleTwo'], 10, 3);
-        add_shortcode('wp_vite_react', [$this, 'wp_vite_react_render_shortcode']);
+        add_shortcode('adbridge_booking', [$this, 'wp_vite_react_render_shortcode']);
     }
 
     // function shortocode render()
