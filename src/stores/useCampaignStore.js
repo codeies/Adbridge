@@ -8,7 +8,16 @@ const useCampaignStore = create((set) => ({
         selectedLocation: "all",
         searchTerm: "",
         selectedBillboard: null,
-        selectedDuration: ""
+        selectedDuration: "",
+        startDate: "",
+        endDate: "",
+        totalPrice: 0,
+        mediaType: "image-video",
+        mediaUrl: null,
+        mediaFile: null,
+        numDays: 1,
+        numWeeks: 1,
+        numMonths: 1,
     },
     radio: {
         selectedCategory: "all",
@@ -19,21 +28,30 @@ const useCampaignStore = create((set) => ({
         selectedTimeSlot: "",
         jingles: [],
         announcements: [],
-        pricing: {} // Ensure this exists
+        pricing: {},
+        campaignType: null,
+        selectedSession: "",
+        selectedSpots: "",
+        audioFile: null,
+        announcement: "",
+        jingleCreationType: "upload",
+        jingleText: "",
+        startDate: "",
+        numberOfDays: "",
     },
     tv: {},
 
-    // Actions
+    totalOrderCost: 0,
+
     setCurrentStep: (step) => set({ currentStep: step }),
     setCampaignType: (type) => set({ campaignType: type }),
     setBillboardFilters: (filters) => set((state) => ({
-        billboard: { ...state.billboard, ...filters }
+        billboard: { ...state.billboard, ...filters } // Update billboardFilters instead of billboard
     })),
     setRadioFilters: (filters) => set((state) => ({
         radio: { ...state.radio, ...filters }
     })),
     setSelectedRadio: (radio) => {
-        // Extracting pricing from jingles and announcements
         const jinglePricing = radio.jingles?.map(j => ({
             name: j.name,
             pricePerSlot: parseFloat(j.price_per_slot),
@@ -57,7 +75,8 @@ const useCampaignStore = create((set) => ({
                 }
             }
         });
-    }
+    },
+    setTotalOrderCost: (cost) => set({ totalOrderCost: cost })
 }));
 
 export default useCampaignStore;

@@ -3,6 +3,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import useCampaignStore from "@/stores/useCampaignStore";
+import { useEffect, useState } from "react";
+import axios from 'axios';
 
 const RadioStep = () => {
     const {
@@ -12,30 +14,29 @@ const RadioStep = () => {
         setCampaignType
     } = useCampaignStore();
 
+    const [radioStations, setRadioStations] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const fetchRadioStations = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const response = await axios.get("http://localhost/wordpress/wp-json/adrentals/v1/campaigns?adrentals_type=radio");
+                setRadioStations(response.data);
+            } catch (err) {
+                setError(err);
+                console.error("Error fetching radio stations:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchRadioStations();
+    }, []);
+
     // Extract unique station types and locations from data
-
-    const radioStations = [
-        {
-            "id": 6,
-            "title": "Classic Rock FM",
-            "content": "The best classic rock hits from the 60s, 70s, and 80s.",
-            "adrental_category": ["Music"],
-            "adrental_location": ["London", "New York", "Washington"],
-            "_adrentals_type": "FM",
-            "attributes": [
-                { "attribute": "Frequency", "value": "89.9" },
-                { "attribute": "Genre", "value": "Rock" }
-            ],
-            "jingles": [
-                { "name": "Morning", "max_slots": "3", "price_per_slot": "100" },
-                { "name": "Evening", "max_slots": "5", "price_per_slot": "10" }
-            ],
-            "announcements": [
-                { "name": "Morning", "max_slots": "2", "price_per_slot": "10" }
-            ]
-        }
-    ];
-
     const stationTypes = ["all", ...new Set(radioStations.map(station => station._adrentals_type))];
     const locations = ["all", ...new Set(radioStations.flatMap(station => station.adrental_location))];
 
@@ -43,11 +44,20 @@ const RadioStep = () => {
     // Corrected filtering logic
     const filteredStations = radioStations.filter((r) => {
         const matchesType = radio.selectedCategory === "all" || r._adrentals_type === radio.selectedCategory;
-        const matchesLocation = radio.selectedLocation === "all" || r.adrental_location.includes(radio.selectedLocation);
-        const matchesSearch = radio.searchTerm ? r.title.toLowerCase().includes(radio.searchTerm.toLowerCase()) : true;
+        const matchesLocation = radio.selectedLocation === "all" || r.adrental_location?.includes(radio.selectedLocation); // Added optional chaining
+        const matchesSearch = radio.searchTerm ? r.title?.toLowerCase().includes(radio.searchTerm.toLowerCase()) : true; // Added optional chaining
 
         return matchesType && matchesLocation && matchesSearch;
     });
+
+    if (loading) {
+        return <div>Loading radio stations...</div>;
+    }
+
+    if (error) {
+        return <div>Error loading radio stations.</div>;
+    }
+
 
     return (
         <div className="space-y-6">
@@ -127,14 +137,13 @@ const RadioStep = () => {
                         <CardContent className="p-4">
                             <div className="aspect-video bg-gray-200 mb-4 rounded"></div>
                             <h3 className="font-semibold">{station.title}</h3>
-                            {station.attributes.map((attr, index) => (
+                            {station.attributes?.map((attr, index) => ( // Added optional chaining
                                 <p key={index} className="text-sm text-gray-600">
                                     {attr.attribute}: {attr.value}
                                 </p>
                             ))}
                         </CardContent>
                     </Card>
-
                 ))}
             </div>
         </div>

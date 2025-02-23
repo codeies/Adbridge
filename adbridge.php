@@ -102,5 +102,6 @@ class WPViteReact
         );
     }
 }
+include_once(plugin_dir_path(__FILE__) . "/inc/woocommerce.php");
 
 new WPViteReact();

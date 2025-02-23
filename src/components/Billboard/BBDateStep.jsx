@@ -5,19 +5,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Video, Image, Youtube, Calendar, DollarSign, Clock } from "lucide-react";
+import { Video, Image, Youtube, Calendar, Clock } from "lucide-react";
 import useCampaignStore from "@/stores/useCampaignStore";
 
+import StepHeader from "@/components/StepHeader";
+
 const BBDateStep = () => {
-    const { billboard, setCurrentStep, billboardFilters, setBillboardFilters } = useCampaignStore();
-    const [startDate, setStartDate] = useState("");
+    const { billboard, setCurrentStep, setBillboardFilters, setTotalOrderCost } = useCampaignStore();
+    const [startDate, setStartDate] = useState(billboard.startDate || "");
     const [numDays, setNumDays] = useState(1);
     const [numWeeks, setNumWeeks] = useState(1);
     const [numMonths, setNumMonths] = useState(1);
-    const [youtubeUrl, setYoutubeUrl] = useState("");
-    const [mediaPreview, setMediaPreview] = useState(null);
-    const [mediaType, setMediaType] = useState("image-video");
-    const [endDatePreview, setEndDatePreview] = useState("");
+    const [youtubeUrl, setYoutubeUrl] = useState(billboard.mediaType === "youtube" ? billboard.mediaUrl : "");
+    const [mediaPreview, setMediaPreview] = useState(billboard.mediaType === "image-video" ? billboard.mediaUrl : null);
+    const [mediaFile, setMediaFile] = useState(billboard.mediaFile || null); // Add mediaFile to state
+    const [mediaType, setMediaType] = useState(billboard.mediaType || "image-video");
+    const [endDatePreview, setEndDatePreview] = useState(billboard.endDate || "");
 
     useEffect(() => {
         if (startDate) {
@@ -33,16 +36,26 @@ const BBDateStep = () => {
         }
     }, [startDate, numDays, numWeeks, numMonths, billboard.selectedDuration]);
 
+    useEffect(() => {
+        if (billboard.selectedBillboard && billboard.selectedDuration) {
+            const cost = calculatePricing();
+            setTotalOrderCost(cost);
+        }
+    }, [numDays, numWeeks, numMonths, billboard.selectedBillboard, billboard.selectedDuration, setTotalOrderCost]);
+
+
     const handleFileChange = (e) => {
         const file = e.target.files[0];
         if (file) {
             setMediaPreview(URL.createObjectURL(file));
+            setMediaFile(file); // Store the file object
             setYoutubeUrl("");
         }
     };
 
     const handleYoutubeChange = (e) => {
         setYoutubeUrl(e.target.value);
+        setMediaFile(null); // Clear mediaFile when youtube url is used
         const videoId = e.target.value.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/)?.[1];
         if (videoId) {
             setMediaPreview(`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`);
@@ -52,27 +65,44 @@ const BBDateStep = () => {
     };
 
     const calculatePricing = () => {
-        let basePrice = billboard.selectedBillboard?.pricing[billboard.selectedDuration] || 0;
-        if (billboard.selectedDuration?.includes("daily")) {
+        if (!billboard.selectedBillboard || !billboard.selectedDuration) return 0;
+
+        let basePrice = billboard.selectedBillboard.pricing[billboard.selectedDuration] || 0;
+
+        if (billboard.selectedDuration.includes("daily")) {
             return basePrice * numDays;
-        } else if (billboard.selectedDuration?.includes("weekly")) {
+        } else if (billboard.selectedDuration.includes("weekly")) {
             return basePrice * numWeeks;
-        } else if (billboard.selectedDuration?.includes("monthly")) {
+        } else if (billboard.selectedDuration.includes("monthly")) {
             return basePrice * numMonths;
         }
+
         return basePrice;
     };
 
+
+
     const handleNext = () => {
         setBillboardFilters({
-            ...billboardFilters,
+            ...billboard,
             startDate,
             endDate: endDatePreview,
-            totalPrice: calculatePricing(),
+            totalPrice: billboard.totalOrderCost, // Use the stored total price
             mediaType,
-            mediaUrl: mediaType === "youtube" ? youtubeUrl : mediaPreview
+            mediaUrl: mediaType === "youtube" ? youtubeUrl : mediaPreview, // Keep mediaPreview for display
+            mediaFile: mediaType === "image-video" ? mediaFile : null, // Store mediaFile in store
+            numDays,
+            numWeeks,
+            numMonths
         });
         setCurrentStep(5);
+    };
+
+
+
+    const handleBack = () => {
+        setCurrentStep(3);
+        //setCampaignType(null);
     };
 
     const isNextDisabled = !startDate || (!mediaPreview && !youtubeUrl);
@@ -82,12 +112,12 @@ const BBDateStep = () => {
             {/* Left Column - Campaign Details Form */}
             <div className="w-full lg:w-2/3 p-4 lg:p-6 lg:border-r">
                 <div className="max-w-2xl mx-auto">
-                    <div className="flex items-center space-x-4 mb-6">
-                        <Button variant="outline" onClick={() => setCurrentStep(3)} className="text-sm lg:text-base">
-                            <span className="mr-2">←</span> Back
-                        </Button>
-                        <h2 className="text-xl lg:text-2xl font-semibold">Campaign Details</h2>
-                    </div>
+
+                    <StepHeader
+                        title="Campaign Details"
+                        onBack={handleBack}
+                    />
+
 
                     <Card className="mb-6">
                         <CardContent className="space-y-6 pt-6">
@@ -142,7 +172,7 @@ const BBDateStep = () => {
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                </div>
+                                    ிறோம்               </div>
                             )}
 
                             {billboard.selectedDuration?.includes("monthly") && (
@@ -200,7 +230,7 @@ const BBDateStep = () => {
                                 <div className="space-y-4">
                                     <Label>YouTube Video URL</Label>
                                     <Input
-                                        type="text"
+                                        থাৎ type="text"
                                         placeholder="Enter YouTube URL"
                                         value={youtubeUrl}
                                         onChange={handleYoutubeChange}
@@ -281,7 +311,7 @@ const OrderSummary = ({
         <h3 className="text-lg lg:text-xl font-semibold mb-6">Order Summary</h3>
 
         <Card className="mb-4">
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 p-">
                 <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-4">
                         <span className="text-gray-600">Starting Date:</span>
@@ -306,7 +336,7 @@ const OrderSummary = ({
             </CardContent>
         </Card>
 
-        <Card className="mb-6">
+        <Card className="mb-6 p-3">
             <CardHeader>
                 <CardTitle className="text-base lg:text-lg">Media Preview</CardTitle>
             </CardHeader>
@@ -316,7 +346,7 @@ const OrderSummary = ({
                         <img
                             src={mediaPreview}
                             alt="Media preview"
-                            className="w-full h-full object-cover"
+                            पाठकों className="w-full h-full object-cover"
                         />
                     </div>
                 ) : (

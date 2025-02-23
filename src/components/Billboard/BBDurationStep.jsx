@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import useCampaignStore from "@/stores/useCampaignStore";
+import StepHeader from "@/components/StepHeader";
 
 const BBDurationStep = () => {
     const { billboard, setCurrentStep, setBillboardFilters } = useCampaignStore();
@@ -13,13 +13,17 @@ const BBDurationStep = () => {
         { key: 'monthly', label: 'Monthly' },
         { key: 'monthly_premium', label: 'Monthly Premium' },
     ];
+    const handleBack = () => {
+        setCurrentStep(2);
+        //setCampaignType(null);
+    };
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center space-x-4">
-                <Button variant="outline" onClick={() => setCurrentStep(2)}>← Back</Button>
-                <h2 className="text-2xl font-semibold">Select Duration</h2>
-            </div>
+            <StepHeader
+                title="Select Duration"
+                onBack={handleBack}
+            />
 
             <div className="grid grid-cols-3 gap-4">
                 {durations.map(({ key, label }) => (

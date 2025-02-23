@@ -8,6 +8,7 @@ import TVStep from "@/components/TVStep";
 import BBDurationStep from "@/components/Billboard/BBDurationStep";
 import BBDateStep from "@/components/Billboard/BBDateStep";
 import RDDateStep from './Radio/RDDateStep';
+import PaymentStep from './PaymentStep';
 
 const CampaignBooking = () => {
     const { currentStep, campaignType, setCurrentStep, setCampaignType } = useCampaignStore();
@@ -90,6 +91,7 @@ const CampaignBooking = () => {
                 if (currentStep === 2) return <BillboardStep />;
                 if (currentStep === 3) return <BBDurationStep />;
                 if (currentStep === 4) return <BBDateStep />;
+                if (currentStep === 5) return <PaymentStep />;
                 return null;
 
             case 'radio':
