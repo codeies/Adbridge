@@ -1,162 +1,347 @@
 <?php
-add_action('rest_api_init', function () {
-    // Get available payment gateways
-    register_rest_route('adrentals/v1', '/available-gateways', array(
-        'methods' => 'GET',
-        'callback' => 'get_available_payment_gateways',
-        'permission_callback' => '__return_true'
-    ));
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
 
-    // Create checkout session
-    register_rest_route('adrentals/v1', '/create-checkout-session', array(
-        'methods' => 'POST',
-        'callback' => 'create_checkout_session',
-        'permission_callback' => '__return_true'
-    ));
-
-    // Get user details
-    register_rest_route('adrentals/v1', '/user-details', array(
-        'methods' => 'GET',
-        'callback' => 'get_user_details',
-        'permission_callback' => '__return_true'
-    ));
-});
-
-function get_available_payment_gateways()
+class AdBridge_Campaign_Order
 {
-    if (!class_exists('WooCommerce')) {
-        return new WP_Error('woocommerce_required', 'WooCommerce is not active', array('status' => 400));
+    private static $instance = null;
+    private $table_name;
+    private $product_id;
+    private $uploads_dir;
+
+    private function __construct()
+    {
+        global $wpdb;
+        $this->table_name = $wpdb->prefix . 'adbridge_campaign_order';
+        $this->product_id = $this->get_or_create_product();
+
+        // Create uploads directory path
+        $uploads_dir = wp_upload_dir();
+        $this->uploads_dir = $uploads_dir['basedir'] . '/adbridge-campaigns';
+
+        // Create directory if it doesn't exist
+        if (!file_exists($this->uploads_dir)) {
+            wp_mkdir_p($this->uploads_dir);
+        }
+
+        add_action('rest_api_init', [$this, 'register_api_routes']);
+        add_action('woocommerce_order_status_changed', [$this, 'update_campaign_order_status'], 10, 4);
+        add_action('wp_scheduled_delete', [$this, 'cleanup_old_abandoned_campaigns']);
     }
 
-    $available_gateways = WC()->payment_gateways->get_available_payment_gateways();
-    $response = array();
+    public static function get_instance()
+    {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
 
-    foreach ($available_gateways as $gateway) {
-        if ($gateway->enabled === 'yes') {
-            $response[] = array(
-                'id' => $gateway->id,
-                'title' => $gateway->title,
-                'description' => $gateway->description,
-                'icon' => $gateway->icon,
-            );
+    public function install()
+    {
+        global $wpdb;
+        $charset_collate = $wpdb->get_charset_collate();
+
+        $sql = "CREATE TABLE IF NOT EXISTS {$this->table_name} (
+            id BIGINT(20) NOT NULL AUTO_INCREMENT,
+            campaign_id VARCHAR(50) NOT NULL,
+            wc_order_id BIGINT(20) DEFAULT NULL,
+            campaign_type VARCHAR(20) NOT NULL,
+            campaign_data LONGTEXT NOT NULL,
+            media_file BIGINT(20) DEFAULT NULL,
+            arcon_permit BIGINT(20) DEFAULT NULL,
+            total_cost DECIMAL(10,2) NOT NULL,
+            start_date DATE DEFAULT NULL,
+            end_date DATE DEFAULT NULL,
+            status VARCHAR(20) DEFAULT 'abandoned',
+            campaign_status VARCHAR(20) DEFAULT 'scheduled',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY campaign_id (campaign_id),
+            KEY wc_order_id (wc_order_id),
+            KEY status (status)
+        ) $charset_collate;";
+
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        dbDelta($sql);
+    }
+
+    public function register_api_routes()
+    {
+        register_rest_route('adrentals/v1', '/create-campaign-order', [
+            'methods' => 'POST',
+            'callback' => [$this, 'handle_campaign_order'],
+            'permission_callback' => '__return_true',
+        ]);
+    }
+
+    private function get_or_create_product()
+    {
+        $product_id = get_option('_adrental_product_id');
+        if ($product_id && get_post_status($product_id) === 'publish') {
+            return $product_id;
+        }
+
+        // Add product creation logic here if needed
+        return $product_id;
+    }
+
+    /**
+     * Save media file from $_FILES to WordPress Media Library
+     * 
+     * @param string $campaign_id The campaign ID
+     * @param array $params The request parameters
+     * @return int|null The attachment ID or null on failure
+     */
+    private function save_media_file($campaign_id, $params)
+    {
+        //print_r($params);
+        //die();
+        if (!isset($_FILES['media_file'])) {
+            return null;
+        }
+
+        $file_data = $_FILES['media_file'];
+        // Check for upload errors
+        if ($file_data['error'] !== UPLOAD_ERR_OK) {
+            return null;
+        }
+
+        // Generate filename based on campaign type and ID
+        $file_extension = pathinfo($file_data['name'], PATHINFO_EXTENSION);
+
+
+        switch ($params['campaign_type']) {
+            case 'billboard':
+                $file_name = 'billboard_' . $campaign_id . '.' . $file_extension;
+                break;
+            case 'radio':
+                $file_name = 'audio_' . $campaign_id . '.' . $file_extension;
+                break;
+            case 'tv':
+                $file_name = 'video_' . $campaign_id . '.' . $file_extension;
+                break;
+            default:
+                $file_name = 'media_' . $campaign_id . '.' . $file_extension;
+        }
+
+        // Prepare upload array for WordPress
+        $upload = [
+            'name' => $file_name,
+            'type' => $file_data['type'],
+            'tmp_name' => $file_data['tmp_name'],
+            'error' => 0,
+            'size' => $file_data['size']
+        ];
+
+        // Required for media handling
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+        // Upload file to media library
+        $attachment_id = media_handle_sideload($upload, 0, 'AdBridge Campaign: ' . $campaign_id);
+
+        if (is_wp_error($attachment_id)) {
+            return null;
+        }
+
+        // Store campaign reference in attachment meta
+        update_post_meta($attachment_id, '_adbridge_campaign_id', $campaign_id);
+
+        return $attachment_id;
+    }
+
+    /**
+     * Save ARCON permit file from $_FILES
+     */
+    private function save_arcon_permit($campaign_id)
+    {
+        if (!isset($_FILES['arcon_permit'])) {
+            return null;
+        }
+
+        $file_data = $_FILES['arcon_permit'];
+        if ($file_data['error'] !== UPLOAD_ERR_OK) {
+            return null;
+        }
+
+        $file_extension = pathinfo($file_data['name'], PATHINFO_EXTENSION);
+        $file_name = 'permit_' . $campaign_id . '.' . $file_extension;
+
+        $upload = [
+            'name' => $file_name,
+            'type' => $file_data['type'],
+            'tmp_name' => $file_data['tmp_name'],
+            'error' => 0,
+            'size' => $file_data['size']
+        ];
+
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+        $attachment_id = media_handle_sideload($upload, 0, 'AdBridge Permit: ' . $campaign_id);
+
+        if (is_wp_error($attachment_id)) {
+            return null;
+        }
+
+        update_post_meta($attachment_id, '_adbridge_campaign_id', $campaign_id);
+        return $attachment_id;
+    }
+
+    /**
+     * Get MIME type based on media type
+     * 
+     * @param string $media_type The media type
+     * @return string The MIME type
+     */
+    private function get_mime_type($media_type)
+    {
+        switch ($media_type) {
+            case 'image':
+                return 'image/jpeg';
+            case 'image-video':
+                return 'image/jpeg';
+            case 'video':
+                return 'video/mp4';
+            default:
+                return 'image/jpeg';
         }
     }
 
-    return $response;
-}
-
-function get_user_details()
-{
-    $current_user = wp_get_current_user();
-    $user_data = array(
-        'logged_in' => is_user_logged_in(),
-        'first_name' => '',
-        'last_name' => '',
-        'email' => '',
-        'phone' => ''
-    );
-
-    if ($current_user->ID !== 0) {
-        $user_data['first_name'] = $current_user->first_name;
-        $user_data['last_name'] = $current_user->last_name;
-        $user_data['email'] = $current_user->user_email;
-        $user_data['phone'] = get_user_meta($current_user->ID, 'billing_phone', true);
+    /**
+     * Get file extension based on media type
+     * 
+     * @param string $media_type The media type
+     * @return string The file extension with dot
+     */
+    private function get_file_extension($media_type)
+    {
+        switch ($media_type) {
+            case 'image':
+            case 'image-video':
+                return '.jpg';
+            case 'video':
+                return '.mp4';
+            default:
+                return '.jpg';
+        }
     }
 
-    return $user_data;
-}
+    public function handle_campaign_order($request)
+    {
+        global $wpdb;
+        $params = $request->get_params();
+        $params = $params['campaign_data'];
+        if (is_string($params)) {
+            $params = json_decode($params, true); // true returns an array, not an object
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                error_log('JSON decode error in save_media_file: ' . json_last_error_msg());
+                return false; // Exit gracefully if decoding fails
+            }
+        }
 
-function create_checkout_session(WP_REST_Request $request)
-{
-    if (!class_exists('WooCommerce')) {
-        return new WP_Error('woocommerce_required', 'WooCommerce is not active', array('status' => 400));
-    }
+        //    die();
+        $campaign_id = uniqid('camp_');
 
-    $params = $request->get_params();
+        // Save media files
+        $media_file_id = $this->save_media_file($campaign_id, $params);
+        $arcon_permit_id = $this->save_arcon_permit($campaign_id);
 
-    try {
-        // Create a new order
+        // Prepare campaign data
+        $campaign_data = [
+            'campaign_id' => $campaign_id,
+            'campaign_type' => sanitize_text_field($params['campaign_type']),
+            'campaign_data' => json_encode($params),
+            'media_file' => $media_file_id ? (string)$media_file_id : null,
+            'arcon_permit' => $arcon_permit_id ? (string)$arcon_permit_id : null, // Add this column to your DB
+            'total_cost' => floatval($params['total_cost']),
+            'start_date' => sanitize_text_field($params['campaign_details']['start_date'] ?? $params[$params['campaign_type']]['startDate'] ?? null),
+            'end_date' => sanitize_text_field($params['campaign_details']['end_date'] ?? $params[$params['campaign_type']]['endDate'] ?? null),
+            'status' => 'abandoned',
+        ];
+
+        $wpdb->insert(
+            $this->table_name,
+            $campaign_data,
+            ['%s', '%s', '%s', '%s', '%f', '%s', '%s', '%s']
+        );
+
         $order = wc_create_order();
 
-        // Get the billboard product
-        $billboard = wc_get_product(get_option('_adrental_wc_product'));
+        $order->add_product(wc_get_product($this->product_id), 1, ['subtotal' => $params['total_cost'], 'total' => $params['total_cost']]);
+        $order->calculate_totals();
 
-        if (!$billboard) {
-            throw new Exception('Billboard product not found');
+        update_post_meta($order->get_id(), '_campaign_id', $campaign_id);
+
+        $wpdb->update(
+            $this->table_name,
+            ['wc_order_id' => $order->get_id()],
+            ['campaign_id' => $campaign_id],
+            ['%d'],
+            ['%s']
+        );
+
+        $media_url = null;
+        if ($media_file_path && is_numeric($media_file_path)) {
+            $media_url = wp_get_attachment_url((int)$media_file_path);
         }
 
-        // Add billboard as line item with custom meta
-        $item_id = $order->add_product(
-            $billboard,
-            1,
-            array(
-                'total' => $params['total'],
-                'name' => $billboard->get_name() // Ensure product name is included
+        return [
+            'success' => true,
+            'campaign_id' => $campaign_id,
+            'order_id' => $order->get_id(),
+            'checkout_url' => $order->get_checkout_payment_url(),
+            'media_file_id' => $media_file_path ? (int)$media_file_path : null,
+            'media_url' => $media_url,
+        ];
+    }
+
+    public function update_campaign_order_status($order_id, $old_status, $new_status, $order)
+    {
+        global $wpdb;
+        $campaign_id = get_post_meta($order_id, '_campaign_id', true);
+        if (!$campaign_id) return;
+
+        $status = ($new_status === 'completed') ? 'completed' : 'abandoned';
+        $wpdb->update(
+            $this->table_name,
+            ['status' => $status],
+            ['campaign_id' => $campaign_id],
+            ['%s'],
+            ['%s']
+        );
+    }
+
+    public function cleanup_old_abandoned_campaigns()
+    {
+        global $wpdb;
+
+        // First, get the list of media files to delete
+        $abandoned_campaigns = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT media_file FROM {$this->table_name} WHERE status = 'abandoned' AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY) AND media_file IS NOT NULL"
             )
         );
 
-        // Add custom item meta
-        if ($item_id) {
-            wc_add_order_item_meta($item_id, 'Duration', '1 Day');
-            wc_add_order_item_meta($item_id, 'Location', $params['location'] ?? '');
+        // Delete the media files from WordPress Media Library
+        foreach ($abandoned_campaigns as $campaign) {
+            if (!empty($campaign->media_file) && is_numeric($campaign->media_file)) {
+                wp_delete_attachment((int)$campaign->media_file, true);
+            }
         }
 
-        // Add order meta
-        $order->update_meta_data('campaign_type', 'billboard');
-        $order->update_meta_data('billboard_id', $params['billboard_id']);
-        $order->update_meta_data('duration', $params['duration']);
-
-        // Add customer details if provided
-        if (!empty($params['customer_details'])) {
-            $order->set_billing_first_name($params['customer_details']['first_name']);
-            $order->set_billing_last_name($params['customer_details']['last_name']);
-            $order->set_billing_email($params['customer_details']['email']);
-            $order->set_billing_phone($params['customer_details']['phone']);
-        }
-
-        // Set payment method
-        $order->set_payment_method($params['payment_method']);
-
-        // Prevent guest checkout
-        update_option('woocommerce_enable_guest_checkout', 'no');
-
-        // Set order status
-        $order->set_status('pending');
-
-        // Save the order
-        $order->save();
-
-        // Calculate totals
-        $order->calculate_totals();
-
-        // Get checkout URL
-        $checkout_url = $order->get_checkout_payment_url();
-
-        return array(
-            'success' => true,
-            'order_id' => $order->get_id(),
-            'checkout_url' => $checkout_url
+        // Delete the database records
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$this->table_name} WHERE status = 'abandoned' AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)"
+            )
         );
-    } catch (Exception $e) {
-        return new WP_Error('checkout_creation_failed', $e->getMessage(), array('status' => 400));
     }
 }
 
-// Add custom success redirect after payment
-add_action('woocommerce_thankyou', 'redirect_after_successful_order', 10, 1);
-function redirect_after_successful_order($order_id)
-{
-    $order = wc_get_order($order_id);
-
-    if ($order && $order->is_paid()) {
-        $campaign_type = $order->get_meta('campaign_type');
-
-        if ($campaign_type === 'billboard') {
-            wp_redirect(home_url('/campaign/success'));
-            exit;
-        }
-    }
-}
-
-// Disable guest checkout
-add_filter('woocommerce_enable_guest_checkout', '__return_false');
+AdBridge_Campaign_Order::get_instance();

@@ -11,7 +11,7 @@ import useCampaignStore from "@/stores/useCampaignStore";
 import StepHeader from "@/components/StepHeader";
 
 const BBDateStep = () => {
-    const { billboard, setCurrentStep, setBillboardFilters, setTotalOrderCost } = useCampaignStore();
+    const { billboard, setCurrentStep, setBillboardFilters, setBillboardTotalPrice } = useCampaignStore();
     const [startDate, setStartDate] = useState(billboard.startDate || "");
     const [numDays, setNumDays] = useState(1);
     const [numWeeks, setNumWeeks] = useState(1);
@@ -39,9 +39,9 @@ const BBDateStep = () => {
     useEffect(() => {
         if (billboard.selectedBillboard && billboard.selectedDuration) {
             const cost = calculatePricing();
-            setTotalOrderCost(cost);
+            setBillboardTotalPrice(cost);
         }
-    }, [numDays, numWeeks, numMonths, billboard.selectedBillboard, billboard.selectedDuration, setTotalOrderCost]);
+    }, [numDays, numWeeks, numMonths, billboard.selectedBillboard, billboard.selectedDuration, setBillboardTotalPrice]);
 
 
     const handleFileChange = (e) => {

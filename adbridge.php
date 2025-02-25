@@ -1,17 +1,17 @@
 <?php
 
 /**
- * Plugin Name: WP Vite And React
- * Description: WP Vite And React 
- * Author URI:  https://greatkhanjoy.me
- * Plugin URI:  https://greatkhanjoy.me
+ * Plugin Name: AdBridge
+ * Description: AdBridge 
+ * Author URI:  https://codeies.com
+ * Plugin URI:  https://codeies.com
  * Version:     1.0.0
- * Author:      Greatkhanjoy
- * Text Domain: wp-vite-react
+ * Author:      Codeies
+ * Text Domain: adbridge
  * Domain Path: /i18n
  */
 
-class WPViteReact
+class AdBridge
 {
     function __construct()
     {
@@ -76,7 +76,7 @@ class WPViteReact
         // wp_enqueue_style('wp-vite-react-style');
 
         $pluginUrl = plugin_dir_url(__FILE__);
-        wp_localize_script('wp-vite-react-core', 'wpvitereact', [
+        wp_localize_script('wp-vite-react-core', 'AdBridge', [
             'url' => $pluginUrl,
             'nonce' => wp_create_nonce('wp_rest'),
         ]);
@@ -102,6 +102,17 @@ class WPViteReact
         );
     }
 }
+require_once plugin_dir_path(__FILE__) . 'inc/class-campaign-status-manager.php';
+include_once(plugin_dir_path(__FILE__) . "/inc/message_scheduler.php");
+include_once(plugin_dir_path(__FILE__) . "/inc/adbridge_campaign_orders_admin.php");
 include_once(plugin_dir_path(__FILE__) . "/inc/woocommerce.php");
 
-new WPViteReact();
+
+// Register activation hook correctly
+function adbridge_campaign_order_install()
+{
+    AdBridge_Campaign_Order::get_instance()->install();
+}
+register_activation_hook(__FILE__, 'adbridge_campaign_order_install');
+
+new AdBridge();

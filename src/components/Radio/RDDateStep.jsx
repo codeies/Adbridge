@@ -1,187 +1,332 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Upload, ChevronLeft } from "lucide-react";
+import { Upload, ChevronLeft, Video } from "lucide-react";
 import useCampaignStore from "@/stores/useCampaignStore";
 import axios from "axios";
 import { useStore } from 'zustand';
 
+// Memoized components
+const ScriptTypeSelector = memo(({ scriptType, setScriptType }) => (
+    <Card>
+        <CardHeader>
+            <CardTitle>Script Type</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <div className="flex space-x-4">
+                <Button
+                    variant={scriptType === "jingles" ? "default" : "outline"}
+                    onClick={() => setScriptType("jingles")}
+                    className="w-full"
+                >
+                    Jingle
+                </Button>
+                <Button
+                    variant={scriptType === "announcements" ? "default" : "outline"}
+                    onClick={() => setScriptType("announcements")}
+                    className="w-full"
+                >
+                    Announcement
+                </Button>
+            </div>
+        </CardContent>
+    </Card>
+));
+
+const MediaUploader = memo(({ handleMediaUpload, mediaPreview, mediaType }) => (
+    <div className="border-2 border-dashed rounded-lg p-6 text-center">
+        <Input
+            type="file"
+            accept={mediaType === "audio" ? "audio/*" : "video/*"}
+            className="hidden"
+            id="media-upload"
+            onChange={handleMediaUpload}
+        />
+        <label htmlFor="media-upload" className="cursor-pointer">
+            {mediaType === "audio" ? (
+                <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+            ) : (
+                <Video className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+            )}
+            <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
+            <p className="text-xs text-gray-500 mt-1">
+                {mediaType === "audio" ? "MP3 or WAV" : "MP4 or MOV"} (max. 5MB)
+            </p>
+        </label>
+        {mediaPreview && (
+            mediaType === "audio" ? (
+                <audio controls className="mt-4 w-full">
+                    <source src={mediaPreview} type="audio/mpeg" />
+                </audio>
+            ) : (
+                <video controls className="mt-4 w-full max-h-48">
+                    <source src={mediaPreview} type="video/mp4" />
+                </video>
+            )
+        )}
+    </div>
+));
+
+const SessionSelector = memo(({
+    scriptType,
+    sessions,
+    selectedSession,
+    setSelectedSession,
+    selectedSpots,
+    setSelectedSpots
+}) => {
+    const maxSlots = useMemo(() =>
+        sessions[scriptType]?.find(s => s.name === selectedSession)?.max_slots || 0
+        , [sessions, scriptType, selectedSession]);
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Session Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <Select
+                    value={selectedSession}
+                    onValueChange={setSelectedSession}
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select Session" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {(sessions[scriptType] || []).map(session => (
+                            <SelectItem key={session.name} value={session.name}>
+                                {session.name} (${session.price_per_slot}/slot)
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
+                {selectedSession && (
+                    <Select value={selectedSpots} onValueChange={setSelectedSpots}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Number of Spots" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {Array.from({ length: parseInt(maxSlots) }, (_, i) => i + 1).map(num => (
+                                <SelectItem key={num} value={num.toString()}>
+                                    {num} spot{num > 1 ? 's' : ''}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
+            </CardContent>
+        </Card>
+    );
+});
+
+const DurationPicker = memo(({
+    startDate,
+    setStartDate,
+    numberOfDays,
+    setNumberOfDays
+}) => (
+    <Card>
+        <CardHeader>
+            <CardTitle>Campaign Duration</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <Input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                    />
+                    <p className="text-sm text-gray-500 mt-1">Starting Date</p>
+                </div>
+                <div>
+                    <Input
+                        type="number"
+                        value={numberOfDays}
+                        onChange={(e) => setNumberOfDays(e.target.value)}
+                        min="1"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">Number of Days</p>
+                </div>
+            </div>
+        </CardContent>
+    </Card>
+));
+
 const RDDateStep = () => {
-    const { radio, setRadioFilters, setCurrentStep, setTotalOrderCost } = useCampaignStore();
+    const { radio, setRadioFilters, setCurrentStep, setRadioTotalCost, campaignType } = useCampaignStore();
     const currentRadioState = useStore(useCampaignStore, (state) => state.radio);
 
-    // Base states
-    const [campaignType, setCampaignType] = useState(currentRadioState.campaignType || null);
+    // State initialization
+    const [scriptType, setScriptType] = useState(() => currentRadioState.scriptType || null);
+
     const [sessions, setSessions] = useState({ jingles: [], announcements: [] });
-    const [selectedSession, setSelectedSession] = useState(currentRadioState.selectedSession || "");
-    const [selectedSpots, setSelectedSpots] = useState(currentRadioState.selectedSpots || "");
-    const [audioFile, setAudioFile] = useState(currentRadioState.audioFile || null);
-    const [audioPreview, setAudioPreview] = useState(null);
-    const [announcement, setAnnouncement] = useState(currentRadioState.announcement || "");
-    const [jingleCreationType, setJingleCreationType] = useState(currentRadioState.jingleCreationType || "upload");
-    const [jingleText, setJingleText] = useState(currentRadioState.jingleText || "");
-    const [startDate, setStartDate] = useState(currentRadioState.startDate || "");
-    const [numberOfDays, setNumberOfDays] = useState(currentRadioState.numberOfDays || "");
-    const [currentSection, setCurrentSection] = useState("details"); // New state for section management
+    const [selectedSession, setSelectedSession] = useState(() => currentRadioState.selectedSession || "");
+    const [selectedSpots, setSelectedSpots] = useState(() => currentRadioState.selectedSpots || "");
+    const [mediaFile, setMediaFile] = useState(() => currentRadioState.mediaFile || null);
+    const [mediaPreview, setMediaPreview] = useState(null);
+    const [announcement, setAnnouncement] = useState(() => currentRadioState.announcement || "");
+    const [jingleCreationType, setJingleCreationType] = useState(() => currentRadioState.jingleCreationType || "upload");
+    const [jingleText, setJingleText] = useState(() => currentRadioState.jingleText || "");
+    const [startDate, setStartDate] = useState(() => currentRadioState.startDate || "");
+    const [numberOfDays, setNumberOfDays] = useState(() => currentRadioState.numberOfDays || "");
+
     const jingleCreationCost = 50;
+    const mediaType = campaignType === "tv" ? "video" : "audio";
 
-    // Existing useEffects and handlers...
-    useEffect(() => {
-        if (!radio.selectedStation) return;
-        const fetchSessions = async () => {
-            try {
-                const response = await axios.get(`http://localhost/wordpress/wp-json/adrentals/v1/campaign/${radio.selectedStation.id}`);
-                setSessions(response.data);
-            } catch (error) {
-                console.error("Error fetching campaign sessions:", error);
-            }
-        };
-        fetchSessions();
-    }, [radio.selectedStation]);
-
-    useEffect(() => {
-        if (audioFile) {
-            const url = URL.createObjectURL(audioFile);
-            setAudioPreview(url);
-        } else {
-            setAudioPreview(null);
+    // Session data fetching
+    const fetchSessions = useCallback(async () => {
+        if (!radio.selectedStation?.id) return;
+        try {
+            const response = await axios.get(
+                `http://localhost/wordpress/wp-json/adrentals/v1/campaign/${radio.selectedStation.id}`
+            );
+            setSessions(response.data);
+        } catch (error) {
+            console.error("Error fetching campaign sessions:", error);
         }
-    }, [audioFile]);
+    }, [radio.selectedStation?.id]);
 
-    const handleAudioUpload = (e) => {
+    useEffect(() => {
+        fetchSessions();
+    }, [fetchSessions]);
+
+    // Media handling
+    const handleMediaUpload = useCallback((e) => {
         const file = e.target.files[0];
         if (file) {
-            setAudioFile(file);
+            setMediaFile(file);
+            setMediaPreview(URL.createObjectURL(file));
         }
-    };
+    }, []);
 
-    const calculateTotalCost = () => {
+    // Load announcement message from store when component mounts
+    useEffect(() => {
+        if (currentRadioState.announcement) {
+            setAnnouncement(currentRadioState.announcement);
+        }
+    }, [currentRadioState.announcement]);
+
+    // Set script type based on prior selection or default
+    useEffect(() => {
+        if (currentRadioState.scriptType) {
+            setScriptType(currentRadioState.scriptType);
+        }
+    }, [currentRadioState.scriptType]);
+
+    // Cost calculation
+    const totalCost = useMemo(() => {
         if (!selectedSession || !selectedSpots || !numberOfDays) return 0;
-        let baseCost = 0;
-        const session = sessions[campaignType]?.find(s => s.name === selectedSession);
-        if (session) {
-            baseCost = session.price_per_slot * parseInt(selectedSpots) * parseInt(numberOfDays);
-        }
-        let additionalCost = 0;
-        if (campaignType === "jingles" && jingleCreationType === "create") {
-            additionalCost = jingleCreationCost;
-        }
+        const session = sessions[scriptType]?.find(s => s.name === selectedSession);
+        const baseCost = session ? session.price_per_slot * selectedSpots * numberOfDays : 0;
+        const additionalCost = scriptType === "jingles" && jingleCreationType === "create" ? jingleCreationCost : 0;
         return baseCost + additionalCost;
-    };
+    }, [scriptType, selectedSession, selectedSpots, numberOfDays, jingleCreationType, sessions]);
 
-    const handleBack = () => {
-        if (currentSection === "summary") {
-            setCurrentSection("details");
-        } else {
-            setCurrentStep(2);
-        }
-    };
+    useEffect(() => {
+        setRadioTotalCost(totalCost);
+    }, [totalCost, setRadioTotalCost]);
 
-    const handleNext = () => {
-        if (currentSection === "details") {
-            setCurrentSection("summary");
-        } else {
-            setRadioFilters({
-                selectedCampaignType: campaignType,
-                selectedSession,
-                selectedSpots,
-                audioFile: campaignType === "jingles" && jingleCreationType === "upload" ? audioFile : null,
-                announcementText: campaignType === "announcements" ? announcement : null,
-                jingleText: campaignType === "jingles" && jingleCreationType === "create" ? jingleText : null,
-                startDate,
-                numberOfDays,
-                jingleCreationType: campaignType === "jingles" ? jingleCreationType : "upload",
-            });
-            setCurrentStep(4);
-        }
-    };
+    // Form submission
+    const handleNext = useCallback(() => {
+        const calculatedEndDate = new Date(startDate);
+        calculatedEndDate.setDate(calculatedEndDate.getDate() + parseInt(numberOfDays) - 1);
 
-    const CampaignDetails = () => (
-        <div className="space-y-6">
-            {/* Campaign Type Card */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Campaign Type</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex space-x-4">
-                        <Button
-                            variant={campaignType === "jingles" ? "default" : "outline"}
-                            onClick={() => setCampaignType("jingles")}
-                            className="w-full"
-                        >
-                            Jingle
-                        </Button>
-                        <Button
-                            variant={campaignType === "announcements" ? "default" : "outline"}
-                            onClick={() => setCampaignType("announcements")}
-                            className="w-full"
-                        >
-                            Announcement
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
+        setRadioFilters({
+            scriptType,
+            selectedSession,
+            selectedSpots,
+            mediaFile,
+            announcement,
+            jingleText: scriptType === "jingles" && jingleCreationType === "create" ? jingleText : null,
+            startDate,
+            numberOfDays,
+            endDate: calculatedEndDate.toISOString().slice(0, 10),
+            jingleCreationType,
+        });
+        setCurrentStep(4);
+    }, [scriptType, selectedSession, selectedSpots, mediaFile, announcement, jingleText, startDate, numberOfDays, jingleCreationType, setRadioFilters, setCurrentStep]);
 
-            {/* Campaign Content Card */}
-            {campaignType && (
+    const handleBack = useCallback(() => {
+        // Save state before going back
+        setRadioFilters({
+            scriptType,
+            selectedSession,
+            selectedSpots,
+            mediaFile,
+            announcement,
+            jingleText,
+            startDate,
+            numberOfDays,
+            jingleCreationType,
+        });
+        setCurrentStep(2);
+    }, [scriptType, selectedSession, selectedSpots, mediaFile, announcement, jingleText, startDate, numberOfDays, jingleCreationType, setRadioFilters, setCurrentStep]);
+
+    // Form validation
+    const isFormValid = useMemo(() => {
+        const basicValid = scriptType && selectedSession && selectedSpots && startDate && numberOfDays;
+        const jingleValid = scriptType === "jingles" && (
+            (jingleCreationType === "upload" && mediaFile) ||
+            (jingleCreationType === "create" && jingleText)
+        );
+        const announcementValid = scriptType === "announcements" && announcement;
+
+        return basicValid && (jingleValid || announcementValid);
+    }, [scriptType, selectedSession, selectedSpots, startDate, numberOfDays, jingleCreationType, mediaFile, jingleText, announcement]);
+
+    return (
+        <div className="max-w-5xl mx-auto p-6 space-y-6">
+            <div className="flex items-center justify-between mb-8">
+                <div className="space-y-1">
+                    <h2 className="text-3xl font-bold">Create Campaign</h2>
+                    <p className="text-gray-500">Configure campaign details</p>
+                </div>
+                <Button variant="outline" className="flex items-center gap-2" onClick={handleBack}>
+                    <ChevronLeft className="h-4 w-4" />
+                    Back
+                </Button>
+            </div>
+
+            <ScriptTypeSelector scriptType={scriptType} setScriptType={setScriptType} />
+
+            {scriptType === "jingles" && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>{campaignType === "jingles" ? "Jingle Details" : "Announcement Message"}</CardTitle>
+                        <CardTitle>Jingle Details</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        {campaignType === "jingles" ? (
-                            <>
-                                <div className="flex space-x-4 mb-4">
-                                    <Button
-                                        variant={jingleCreationType === "upload" ? "default" : "outline"}
-                                        onClick={() => setJingleCreationType("upload")}
-                                        className="w-full"
-                                    >
-                                        Upload Jingle
-                                    </Button>
-                                    <Button
-                                        variant={jingleCreationType === "create" ? "default" : "outline"}
-                                        onClick={() => setJingleCreationType("create")}
-                                        className="w-full"
-                                    >
-                                        Create Jingle (+${jingleCreationCost})
-                                    </Button>
-                                </div>
-
-                                {jingleCreationType === "upload" ? (
-                                    <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                                        <Input
-                                            type="file"
-                                            accept="audio/*"
-                                            className="hidden"
-                                            id="audio-upload"
-                                            onChange={handleAudioUpload}
-                                        />
-                                        <label htmlFor="audio-upload" className="cursor-pointer">
-                                            <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                                            <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
-                                            <p className="text-xs text-gray-500 mt-1">MP3 or WAV (max. 5MB)</p>
-                                        </label>
-                                    </div>
-                                ) : (
-                                    <Textarea
-                                        placeholder="Enter your jingle text"
-                                        value={jingleText}
-                                        onChange={(e) => setJingleText(e.target.value)}
-                                        className="h-32"
-                                    />
-                                )}
-                            </>
+                        <div className="flex space-x-4 mb-4">
+                            <Button
+                                variant={jingleCreationType === "upload" ? "default" : "outline"}
+                                onClick={() => setJingleCreationType("upload")}
+                                className="w-full"
+                            >
+                                Upload Jingle
+                            </Button>
+                            <Button
+                                variant={jingleCreationType === "create" ? "default" : "outline"}
+                                onClick={() => setJingleCreationType("create")}
+                                className="w-full"
+                            >
+                                Create Jingle (+${jingleCreationCost})
+                            </Button>
+                        </div>
+                        {jingleCreationType === "upload" ? (
+                            <MediaUploader
+                                handleMediaUpload={handleMediaUpload}
+                                mediaPreview={mediaPreview}
+                                mediaType={mediaType}
+                            />
                         ) : (
                             <Textarea
-                                placeholder="Enter your announcement message (max 100 words)"
-                                value={announcement}
-                                onChange={(e) => setAnnouncement(e.target.value)}
+                                value={jingleText}
+                                onChange={(e) => setJingleText(e.target.value)}
+                                placeholder="Enter your jingle text"
                                 className="h-32"
                             />
                         )}
@@ -189,178 +334,45 @@ const RDDateStep = () => {
                 </Card>
             )}
 
-            {/* Session Selection Card */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Session Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <Select value={selectedSession} onValueChange={setSelectedSession}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select Session" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {(sessions[campaignType] || []).map(session => (
-                                <SelectItem key={session.name} value={session.name}>
-                                    {session.name} (${session.price_per_slot}/slot)
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+            {scriptType === "announcements" && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Announcement Message</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Textarea
+                            value={announcement}
+                            onChange={(e) => setAnnouncement(e.target.value)}
+                            placeholder="Enter your announcement message (max 100 words)"
+                            className="h-32"
+                        />
+                    </CardContent>
+                </Card>
+            )}
 
-                    {selectedSession && (
-                        <Select value={selectedSpots} onValueChange={setSelectedSpots}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Number of Spots" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {Array.from({ length: parseInt(sessions[campaignType]?.find(s => s.name === selectedSession)?.max_slots || 0) }, (_, i) => i + 1).map(num => (
-                                    <SelectItem key={num} value={num.toString()}>
-                                        {num} spot{num > 1 ? 's' : ''}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    )}
-                </CardContent>
-            </Card>
-        </div>
-    );
+            <SessionSelector
+                scriptType={scriptType}
+                sessions={sessions}
+                selectedSession={selectedSession}
+                setSelectedSession={setSelectedSession}
+                selectedSpots={selectedSpots}
+                setSelectedSpots={setSelectedSpots}
+            />
 
-    const CampaignSummary = () => (
-        <div className="space-y-6">
-            {/* Campaign Duration Card */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Campaign Duration</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Input
-                                type="date"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                            />
-                            <p className="text-sm text-gray-500 mt-1">Starting Date</p>
-                        </div>
-                        <div>
-                            <Input
-                                type="number"
-                                value={numberOfDays}
-                                onChange={(e) => setNumberOfDays(e.target.value)}
-                            />
-                            <p className="text-sm text-gray-500 mt-1">Number of Days</p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Preview Card */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Campaign Preview</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {campaignType === "jingles" ? (
-                        jingleCreationType === "upload" ? (
-                            audioPreview && (
-                                <audio controls className="w-full">
-                                    <source src={audioPreview} type={audioFile.type} />
-                                </audio>
-                            )
-                        ) : (
-                            <div className="p-4 bg-gray-50 rounded-lg">
-                                <p className="text-gray-700">{jingleText}</p>
-                            </div>
-                        )
-                    ) : (
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                            <p className="text-gray-700">{announcement}</p>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Order Summary Card */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Order Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        <div className="flex justify-between">
-                            <span>Campaign Type</span>
-                            <span className="font-medium">
-                                {campaignType === "jingles" ? "Jingle" : "Announcement"}
-                            </span>
-                        </div>
-                        {selectedSession && (
-                            <div className="flex justify-between">
-                                <span>Session</span>
-                                <span className="font-medium">{selectedSession}</span>
-                            </div>
-                        )}
-                        {selectedSpots && (
-                            <div className="flex justify-between">
-                                <span>Spots</span>
-                                <span className="font-medium">{selectedSpots}</span>
-                            </div>
-                        )}
-                        <div className="flex justify-between">
-                            <span>Duration</span>
-                            <span className="font-medium">{numberOfDays} days</span>
-                        </div>
-                        {campaignType === "jingles" && jingleCreationType === "create" && (
-                            <div className="flex justify-between">
-                                <span>Creation Fee</span>
-                                <span className="font-medium">+${jingleCreationCost}</span>
-                            </div>
-                        )}
-                        <div className="border-t pt-4 mt-4">
-                            <div className="flex justify-between text-lg font-bold">
-                                <span>Total Cost</span>
-                                <span>${calculateTotalCost().toLocaleString()}</span>
-                            </div>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
-    );
-
-    return (
-        <div className="max-w-5xl mx-auto p-6 space-y-6">
-            <div className="flex items-center justify-between mb-8">
-                <div className="space-y-1">
-                    <h2 className="text-3xl font-bold">Create Campaign</h2>
-                    <p className="text-gray-500">
-                        {currentSection === "details" ? "Configure campaign details" : "Review and finalize"}
-                    </p>
-                </div>
-                <Button
-                    variant="outline"
-                    className="flex items-center gap-2"
-                    onClick={handleBack}
-                >
-                    <ChevronLeft className="h-4 w-4" />
-                    Back
-                </Button>
-            </div>
-
-            {currentSection === "details" ? <CampaignDetails /> : <CampaignSummary />}
+            <DurationPicker
+                startDate={startDate}
+                setStartDate={setStartDate}
+                numberOfDays={numberOfDays}
+                setNumberOfDays={setNumberOfDays}
+            />
 
             <div className="flex justify-end space-x-4">
                 <Button
                     className="w-full"
                     onClick={handleNext}
-                    disabled={!campaignType || !selectedSession || !selectedSpots ||
-                        (currentSection === "summary" && (!startDate || !numberOfDays)) ||
-                        (campaignType === "jingles" && jingleCreationType === "upload" && !audioFile) ||
-                        (campaignType === "jingles" && jingleCreationType === "create" && !jingleText) ||
-                        (campaignType === "announcements" && !announcement)}
+                    disabled={!isFormValid}
                 >
-                    {currentSection === "details" ? "Next: Review Campaign" : "Finalize Campaign"}
+                    Next: Review Campaign
                 </Button>
             </div>
         </div>

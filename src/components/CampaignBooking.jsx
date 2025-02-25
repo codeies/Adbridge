@@ -1,5 +1,5 @@
 import React from 'react';
-import { Circle, Radio, Tv, Clock, Calendar, CreditCard, FileVideo, FileAudio, CheckCircle } from 'lucide-react';
+import { Circle, Radio, Tv, Clock, Calendar, CreditCard, FileVideo, FileAudio, CheckCircle, BadgeCheck } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import useCampaignStore from "@/stores/useCampaignStore";
 import BillboardStep from "@/components/BillboardStep";
@@ -9,6 +9,8 @@ import BBDurationStep from "@/components/Billboard/BBDurationStep";
 import BBDateStep from "@/components/Billboard/BBDateStep";
 import RDDateStep from './Radio/RDDateStep';
 import PaymentStep from './PaymentStep';
+import RadioArconStep from './Radio/RDArconStep';
+import RDArconStep from './Radio/RDArconStep';
 
 const CampaignBooking = () => {
     const { currentStep, campaignType, setCurrentStep, setCampaignType } = useCampaignStore();
@@ -24,8 +26,8 @@ const CampaignBooking = () => {
         radio: [
             { name: 'Campaign Type', icon: Circle },
             { name: 'Select Station', icon: Radio },
-            { name: 'Time Slot', icon: Clock },
             { name: 'Script Upload', icon: FileAudio },
+            { name: 'ARCON Permit', icon: BadgeCheck },
             { name: 'Payment', icon: CreditCard }
         ],
         tv: [
@@ -95,13 +97,14 @@ const CampaignBooking = () => {
                 return null;
 
             case 'radio':
+            case 'tv':
                 if (currentStep === 2) return <RadioStep />;
                 if (currentStep === 3) return <RDDateStep />;
-                if (currentStep === 4) return <BBDateStep />;
+                if (currentStep === 4) return <RDArconStep />;
+                if (currentStep === 5) return <PaymentStep />;
                 return null;
 
-            case 'tv':
-                return <TVStep />;
+            //    return <TVStep />;
 
             default:
                 return null;

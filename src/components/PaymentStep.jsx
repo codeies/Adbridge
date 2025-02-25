@@ -1,157 +1,158 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2 } from "lucide-react";
+import { Loader2, ArrowLeft, ShoppingCart } from "lucide-react";
 import axios from "axios";
 import StepHeader from "./StepHeader";
 import useCampaignStore from "@/stores/useCampaignStore";
 
 const PaymentStep = () => {
-    const [paymentMethods, setPaymentMethods] = useState([]);
-    const [selectedMethod, setSelectedMethod] = useState("");
-    const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState(null);
-    const [customer, setCustomer] = useState({
-        first_name: "",
-        last_name: "",
-        email: "",
-        phone: ""
-    });
+    const [savedCart, setSavedCart] = useState(null);
 
     const {
         currentStep,
         campaignType,
         billboard,
         radio,
+        arcon,
         totalOrderCost,
         setCurrentStep,
     } = useCampaignStore();
 
+    // Check for existing abandoned cart on component mount
     useEffect(() => {
-        fetchPaymentMethods();
-        fetchUserDetails();
+        /*         const checkExistingCart = async () => {
+                    try {
+                        const response = await axios.get(
+                            "http://localhost/wordpress/wp-json/adrentals/v1/check-abandoned-cart"
+                        );
+                        if (response.data.success && response.data.cart) {
+                            setSavedCart(response.data.cart);
+                        }
+                    } catch (error) {
+                        console.error("Failed to check abandoned cart:", error);
+                    }
+                }; */
+
+        //checkExistingCart();
     }, []);
 
-    const fetchPaymentMethods = async () => {
-        try {
-            const response = await axios.get("http://localhost/wordpress/wp-json/adrentals/v1/available-gateways");
-            setPaymentMethods(response.data);
-            if (response.data.length > 0) {
-                setSelectedMethod(response.data[0].id);
-            }
-        } catch (error) {
-            setError("Failed to load payment methods.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchUserDetails = async () => {
-        try {
-            const response = await axios.get("http://localhost/wordpress/wp-json/adrentals/v1/user-details");
-            if (response.data.logged_in) {
-                setCustomer({
-                    first_name: response.data.first_name,
-                    last_name: response.data.last_name,
-                    email: response.data.email,
-                    phone: response.data.phone
-                });
-            }
-        } catch (error) {
-            console.error("Failed to fetch user details:", error);
-        }
-    };
-
-    const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setCustomer((prev) => ({ ...prev, [name]: value }));
-    };
-
-    const processPayment = async () => {
+    const createOrder = async () => {
         setProcessing(true);
         setError(null);
 
         try {
-            if (!customer.first_name || !customer.email || !customer.phone) {
-                throw new Error("Please enter all customer details.");
-            }
+            // Create FormData object to handle file uploads
+            const formData = new FormData();
 
-            let orderData = {
-                payment_method: selectedMethod,
-                total: totalOrderCost,
-                customer_details: customer
+            // Prepare campaign details based on type
+            const campaignData = {
+                campaign_type: campaignType,
+                total_cost: totalOrderCost,
+                campaign_details: campaignType === "billboard" ? {
+                    billboard_id: billboard.selectedBillboard.id,
+                    billboard_name: billboard.selectedBillboard.name,
+                    duration_type: billboard.selectedDuration,
+                    num_days: billboard.numDays || 0,
+                    num_weeks: billboard.numWeeks || 0,
+                    num_months: billboard.numMonths || 0,
+                    location: billboard.selectedBillboard.location,
+                    dimensions: billboard.selectedBillboard.dimensions,
+                    start_date: billboard.startDate,
+                    end_date: billboard.endDate,
+                    media_type: billboard.mediaType,
+                    media_url: billboard.mediaUrl,
+                } : {
+                    station_id: radio.selectedStation.id,
+                    station_name: radio.selectedStation.title,
+                    duration: radio.selectedDuration,
+                    time_slot: radio.selectedTimeSlot,
+                    session: radio.selectedSession,
+                    spots: radio.selectedSpots,
+                    start_date: radio.startDate,
+                    end_date: radio.endDate,
+                    number_of_days: radio.numberOfDays,
+                    script_type: radio.scriptType,
+                    announcement: radio.announcementText,
+                    jingle_text: radio.jingleText,
+                    jingle_creation_type: radio.jingleCreationType,
+                    //announcements: radio.announcements,
+                    //jingles: radio.jingles
+                }
             };
 
-            if (campaignType === "billboard") {
-                orderData = {
-                    ...orderData,
-                    billboard_id: billboard.selectedBillboard.id,
-                };
-            } else if (campaignType === "radio") {
-                orderData = {
-                    ...orderData,
-                    radio_station_id: radio.selectedStation.id,
-                    radio_details: {
-                        selectedDuration: radio.selectedDuration,
-                        selectedTimeSlot: radio.selectedTimeSlot,
-                        jingles: radio.jingles,
-                        announcements: radio.announcements,
-                        selectedSession: radio.selectedSession,
-                        selectedSpots: radio.selectedSpots,
-                        audioFile: radio.audioFile,
-                        announcement: radio.announcement,
-                        jingleCreationType: radio.jingleCreationType,
-                        jingleText: radio.jingleText,
-                        startDate: radio.startDate,
-                        numberOfDays: radio.numberOfDays
-                    }
-                };
+            // Add campaign data to FormData
+            formData.append('campaign_data', JSON.stringify(campaignData));
+
+            // Add files based on campaign type
+            if (campaignType === "billboard" && billboard.mediaFile) {
+                formData.append('media_file', billboard.mediaFile);
+            }
+
+            if ((campaignType === "radio" || campaignType === "tv") && radio.audioFile) {
+                formData.append('media_file', radio.audioFile);
             }
 
 
-            const response = await axios.post("http://localhost/wordpress/wp-json/adrentals/v1/create-checkout-session", orderData);
+            // Add ARCON permit file if exists
+            if (arcon.permitFile) {
+                formData.append('arcon_permit', arcon.permitFile);
+            }
 
-            if (response.data.checkout_url) {
-                localStorage.setItem("campaign_data", JSON.stringify({
-                    ...(campaignType === 'billboard' ? { billboard_id: billboard.selectedBillboard.id } : {}),
-                    ...(campaignType === 'radio' ? { radio_station_id: radio.selectedStation.id } : {}),
-                    payment_method: selectedMethod,
-                    order_id: response.data.order_id,
-                    campaign_type: campaignType, // Save campaign type
-                    customer_details: customer, // Save customer details
-                    total_order_cost: totalOrderCost, // Save total order cost
-                    ...(campaignType === 'radio' ? { radio_details: orderData.radio_details } : {}), // Save radio details if campaign type is radio
+            // Save campaign data and get WooCommerce checkout URL
+            const response = await axios.post(
+                "http://localhost/wordpress/wp-json/adrentals/v1/create-campaign-order",
+                formData,
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data'
+                    }
+                }
+            );
 
-                }));
+            if (response.data.success && response.data.checkout_url) {
+                // Store campaign data in localStorage
+                /*     localStorage.setItem("abountrant_campaign", JSON.stringify({
+                        campaign_id: response.data.campaign_id,
+                        order_id: response.data.order_id,
+                        campaign_type: campaignType,
+                        campaign_details: campaignData.campaign_details
+                    }));
+     */
+                // Redirect to WooCommerce checkout
                 window.location.href = response.data.checkout_url;
             } else {
-                throw new Error("No checkout URL received.");
+                throw new Error("Failed to create order");
             }
         } catch (error) {
-            setError(error.message || "Failed to process payment.");
+            setError(error.response?.data?.message || "Failed to process order.");
             setProcessing(false);
         }
     };
 
-    if (loading) {
-        return (
-            <div className="space-y-6">
-                <StepHeader title="Payment" onBack={() => setCurrentStep(4)} />
-                <div className="flex justify-center items-center h-64">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                </div>
-            </div>
-        );
-    }
+    const resumeExistingCart = () => {
+        if (savedCart?.checkout_url) {
+            window.location.href = savedCart.checkout_url;
+        }
+    };
+
+    const formatDate = (dateString) => {
+        return new Date(dateString).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    };
 
     return (
         <div className="space-y-6">
-            <StepHeader title="Payment" onBack={() => setCurrentStep(currentStep - 1)} />
+            <StepHeader
+                title="Review & Checkout"
+                onBack={() => setCurrentStep(currentStep - 1)}
+            />
 
             {error && (
                 <Alert variant="destructive">
@@ -159,126 +160,164 @@ const PaymentStep = () => {
                 </Alert>
             )}
 
+            {savedCart && (
+                <Alert>
+                    <AlertDescription className="flex items-center justify-between">
+                        <span>You have an existing campaign in your cart.</span>
+                        <Button onClick={resumeExistingCart} variant="outline" size="sm">
+                            <ShoppingCart className="mr-2 h-4 w-4" />
+                            Resume Checkout
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            )}
+
             <Card>
                 <CardContent className="p-6 space-y-6">
                     <div>
-                        <h3 className="text-lg font-semibold mb-4">Customer Details</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <Label>First Name</Label>
-                                <Input name="first_name" value={customer.first_name} onChange={handleInputChange} required />
-                            </div>
-                            <div>
-                                <Label>Last Name</Label>
-                                <Input name="last_name" value={customer.last_name} onChange={handleInputChange} />
-                            </div>
-                            <div>
-                                <Label>Email</Label>
-                                <Input type="email" name="email" value={customer.email} onChange={handleInputChange} required />
-                            </div>
-                            <div>
-                                <Label>Phone</Label>
-                                <Input type="tel" name="phone" value={customer.phone} onChange={handleInputChange} required />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h3 className="text-lg font-semibold mb-4">Select Payment Method</h3>
-                        <RadioGroup value={selectedMethod} onValueChange={setSelectedMethod} className="space-y-4">
-                            {paymentMethods.map((method) => (
-                                <div key={method.id} className="flex items-center space-x-3">
-                                    <RadioGroupItem value={method.id} id={method.id} />
-                                    <Label htmlFor={method.id} className="flex items-center gap-2">
-                                        {method.icon && <img src={method.icon} alt={method.title} className="h-8 w-auto" />}
-                                        <span>{method.title}</span>
-                                    </Label>
-                                </div>
-                            ))}
-                        </RadioGroup>
-                    </div>
-
-                    <div className="border-t pt-6">
-                        <h3 className="text-lg font-semibold mb-4">Order Summary</h3>
-                        <div className="space-y-2">
+                        <h3 className="text-lg font-semibold mb-4">Campaign Summary</h3>
+                        <div className="space-y-4">
                             {campaignType === "billboard" && (
-                                <>
-                                    <div className="flex justify-between">
-                                        <span>Billboard</span>
-                                        <span>{billboard.selectedBillboard?.name}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Duration</span>
-                                        <span>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <span className="font-medium">Billboard:</span>
+                                    <span>{billboard.selectedBillboard?.name}</span>
 
-                                            {billboard.selectedDuration.includes("daily") && billboard.numDays ? `${billboard.numDays} Days` : ""}
-                                            {billboard.selectedDuration.includes("weekly") && billboard.numWeeks ? `${billboard.numWeeks} Weeks` : ""}
-                                            {billboard.selectedDuration.includes("monthly") && billboard.numMonths ? `${billboard.numMonths} Months` : ""}
+                                    <span className="font-medium">Location:</span>
+                                    <span>{billboard.selectedBillboard?.location}</span>
 
-                                        </span>
-                                    </div>
+                                    <span className="font-medium">Dimensions:</span>
+                                    <span>{billboard.selectedBillboard?.dimensions}</span>
 
-                                </>
+                                    <span className="font-medium">Duration Type:</span>
+                                    <span className="capitalize">
+                                        {billboard.selectedDuration.replace('_', ' ')}
+                                    </span>
+
+                                    <span className="font-medium">Campaign Period:</span>
+                                    <span>
+                                        {formatDate(billboard.startDate)} - {formatDate(billboard.endDate)}
+                                    </span>
+
+                                    <span className="font-medium">Media Type:</span>
+                                    <span className="capitalize">{billboard.mediaType}</span>
+
+                                    {billboard.mediaUrl && (
+                                        <>
+                                            <span className="font-medium">Media URL:</span>
+                                            <span className="truncate">{billboard.mediaUrl}</span>
+                                        </>
+                                    )}
+
+                                    {billboard.mediaFile && (
+                                        <>
+                                            <span className="font-medium">Media File:</span>
+                                            <span className="truncate">{billboard.mediaFile.name}</span>
+                                        </>
+                                    )}
+                                </div>
                             )}
-                            {campaignType === "radio" && (
-                                <>
-                                    <div className="flex justify-between">
-                                        <span>Radio Station</span>
-                                        <span>{radio.selectedStation?.title}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Duration</span>
-                                        <span>{radio.selectedDuration}</span>
-                                    </div>
+
+                            {(campaignType === "radio" || campaignType === "tv") && (
+                                <div className="grid grid-cols-2 gap-2">
+                                    <span className="font-medium">{campaignType === "radio" ? "Radio Station:" : "TV Channel:"}</span>
+                                    <span>{radio.selectedStation?.title}</span>
+
+                                    <span className="font-medium">Duration:</span>
+                                    <span>{radio.selectedDuration}</span>
+
                                     {radio.selectedTimeSlot && (
-                                        <div className="flex justify-between">
-                                            <span>Time Slot</span>
+                                        <>
+                                            <span className="font-medium">Time Slot:</span>
                                             <span>{radio.selectedTimeSlot}</span>
-                                        </div>
+                                        </>
                                     )}
+
                                     {radio.selectedSession && (
-                                        <div className="flex justify-between">
-                                            <span>Session</span>
+                                        <>
+                                            <span className="font-medium">{campaignType === "radio" ? "Session:" : "Air Time:"}</span>
                                             <span>{radio.selectedSession}</span>
-                                        </div>
+                                        </>
                                     )}
-                                    {radio.selectedSpots && (
-                                        <div className="flex justify-between">
-                                            <span>Spots</span>
-                                            <span>{radio.selectedSpots}</span>
-                                        </div>
+
+                                    {radio.startDate && (
+                                        <>
+                                            <span className="font-medium">Start Date:</span>
+                                            <span>{formatDate(radio.startDate)}</span>
+                                        </>
                                     )}
-                                    {radio.announcement && (
-                                        <div className="flex justify-between">
-                                            <span>Announcement Text</span>
-                                            <span className="truncate max-w-[150px]">{radio.announcement}</span>
-                                        </div>
+
+                                    {radio.endDate && (
+                                        <>
+                                            <span className="font-medium">End Date:</span>
+                                            <span>{formatDate(radio.endDate)}</span>
+                                        </>
                                     )}
-                                    {radio.jingleText && (
-                                        <div className="flex justify-between">
-                                            <span>Jingle Text</span>
-                                            <span className="truncate max-w-[150px]">{radio.jingleText}</span>
-                                        </div>
+
+                                    {radio.numberOfDays && (
+                                        <>
+                                            <span className="font-medium">Number of Days:</span>
+                                            <span>{radio.numberOfDays}</span>
+                                        </>
                                     )}
-                                </>
+
+                                    {radio.audioFile && (
+                                        <>
+                                            <span className="font-medium">Audio File:</span>
+                                            <span className="truncate">{radio.audioFile.name}</span>
+                                        </>
+                                    )}
+                                </div>
                             )}
-                            <div className="flex justify-between font-semibold">
-                                <span>Total</span>
-                                <span>${totalOrderCost}</span>
+
+                            {arcon.permitFile && (
+                                <div className="grid grid-cols-2 gap-2 border-t pt-4">
+                                    <span className="font-medium">ARCON Permit:</span>
+                                    <span className="truncate">{arcon.permitFile.name}</span>
+
+                                    <span className="font-medium">ARCON Status:</span>
+                                    <span>{arcon.status}</span>
+
+                                    <span className="font-medium">ARCON Cost:</span>
+                                    <span>${arcon.cost.toFixed(2)}</span>
+                                </div>
+                            )}
+
+                            <div className="border-t pt-4 mt-4">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-lg font-semibold">Total Amount:</span>
+                                    <span className="text-lg font-bold">${totalOrderCost.toFixed(2)}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <Button className="w-full" onClick={processPayment} disabled={processing || !selectedMethod}>
-                        {processing ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Processing...
-                            </>
-                        ) : (
-                            `Proceed to Payment`
-                        )}
-                    </Button>
+                    <div className="flex gap-4">
+                        <Button
+                            variant="outline"
+                            onClick={() => setCurrentStep(currentStep - 1)}
+                            disabled={processing}
+                        >
+                            <ArrowLeft className="mr-2 h-4 w-4" />
+                            Back
+                        </Button>
+                        <Button
+                            className="flex-1"
+                            onClick={createOrder}
+                            disabled={processing}
+                        >
+                            {processing ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Processing...
+                                </>
+                            ) : (
+                                <>
+                                    <ShoppingCart className="mr-2 h-4 w-4" />
+                                    Proceed to Checkout
+                                </>
+                            )}
+                        </Button>
+                    </div>
                 </CardContent>
             </Card>
         </div>
