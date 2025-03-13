@@ -35,18 +35,23 @@ class MessageScheduler
         // Registration hooks
         add_action('user_register', [$this, 'scheduleRegistrationMessages'], 10, 1);
 
-        // WooCommerce hooks for abandoned cart
-        //add_action('woocommerce_cart_updated', [$this, 'trackAbandonedCart']);
-        //add_action('woocommerce_order_status_completed', [$this, 'clearAbandonedCartMessages']);
+
+
+        add_action('adbridge_new_aboundent_cart', [$this, 'scheduleAboundentMessages'], 10, 1);
 
         // Campaign hooks
-        //    add_action('init', [$this, 'scheduleBookingConfirmationMessages']);
         add_action('woocommerce_order_status_completed', [$this, 'scheduleBookingConfirmationMessages']);
+        add_action('woocommerce_order_status_completed', [$this, 'clearAbandonedCartMessages']);
+
         add_action('adbridge_campaign_started', [$this, 'scheduleCampaignStartMessages'], 10, 1);
         add_action('adbridge_campaign_ended', [$this, 'schedulePostCampaignMessages'], 10, 1);
 
+
+
+
+
         // User deletion hook
-        //add_action('delete_user', [$this, 'clearAllScheduledMessages'], 10, 1);
+        add_action('delete_user', [$this, 'clearAllScheduledMessages'], 10, 1);
 
         // Message sending handlers
         add_action('send_scheduled_message', [$this, 'sendMessage'], 10, 3);
@@ -71,46 +76,69 @@ class MessageScheduler
         }
     }
 
-    /**
-     * Track abandoned cart and schedule reminders
-     */
-    public function trackAbandonedCart(): void
+    public function scheduleAboundentMessages(int $adbridge_order_id): void
     {
-        // Only proceed if user is logged in and cart is not empty
-        if (!is_user_logged_in() || WC()->cart->is_empty()) {
-            return;
-        }
+        global $wpdb;
 
-        $user_id = get_current_user_id();
+        // Get the abandoned cart data
+        $cart_data = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}adbridge_campaign_order WHERE id = %d",
+            $adbridge_order_id
+        ));
 
-        // Clear any existing abandoned cart notifications
-        $this->clearScheduledMessagesByTrigger($user_id, self::TRIGGER_ABANDONED_CART);
+        $order_id = $cart_data->wc_order_id;
+        $order = wc_get_order($order_id);
 
-        // Schedule new notifications
-        $sms_reminders = carbon_get_theme_option('abandoned_cart_sms');
-        $email_reminders = carbon_get_theme_option('abandoned_cart_email');
+        $user_id = $order->get_user_id(); // Get the user ID associated with the order
 
+
+        // Get notification configurations
+        $sms_notifications = $this->filterNotificationsByTrigger(
+            carbon_get_theme_option('abandoned_cart_sms'),
+            'abandoned_cart'
+        );
+
+        $email_notifications = $this->filterNotificationsByTrigger(
+            carbon_get_theme_option('abandoned_cart_email'),
+            'abandoned_cart'
+        );
+
+        $meta_data = [
+            'cart_id' => $adbridge_order_id,
+            //'cart_contents' => isset($cart_data->cart_contents) ? $cart_data->cart_contents : '',
+            'abandoned_at' => isset($cart_data->created_at) ? $cart_data->created_at : current_time('mysql'),
+        ];
+
+        // Schedule SMS messages
         if ($this->isSmsEnabled()) {
-            $this->scheduleMessages($user_id, self::TYPE_SMS, $sms_reminders, self::TRIGGER_ABANDONED_CART);
+            $this->scheduleMessages($user_id, self::TYPE_SMS, $sms_notifications, self::TRIGGER_ABANDONED_CART, $meta_data);
         }
 
+        // Schedule Email messages
         if ($this->isEmailEnabled()) {
-            $this->scheduleMessages($user_id, self::TYPE_EMAIL, $email_reminders, self::TRIGGER_ABANDONED_CART);
+            $this->scheduleMessages($user_id, self::TYPE_EMAIL, $email_notifications, self::TRIGGER_ABANDONED_CART, $meta_data);
         }
     }
 
     /**
-     * Clear abandoned cart messages when order is completed
+     * Clear abandoned cart messages when an order is completed
+     * 
+     * @param int $order_id WooCommerce order ID
      */
     public function clearAbandonedCartMessages($order_id): void
     {
         $order = wc_get_order($order_id);
-        if ($order) {
-            $user_id = $order->get_user_id();
-            if ($user_id) {
-                $this->clearScheduledMessagesByTrigger($user_id, self::TRIGGER_ABANDONED_CART);
-            }
+        if (!$order) {
+            return;
         }
+
+        $user_id = $order->get_user_id();
+        if (!$user_id) {
+            return;
+        }
+
+        // Clear all scheduled abandoned cart messages for this user
+        $this->clearScheduledMessagesByTrigger($user_id, self::TRIGGER_ABANDONED_CART);
     }
 
     /**
@@ -346,6 +374,12 @@ class MessageScheduler
                 $placeholders['{{campaign_type}}'] = $order_data['campaign_type'];
                 $placeholders['{{campaign_start_date}}'] = date_i18n(get_option('date_format'), strtotime($order_data['start_date']));
                 $placeholders['{{campaign_end_date}}'] = date_i18n(get_option('date_format'), strtotime($order_data['end_date']));
+
+                // Generate checkout URL if WooCommerce order exists
+                $order = wc_get_order($order_data['wc_order_id']);
+                if ($order) {
+                    $placeholders['{{checkout_url}}'] = $order->get_checkout_payment_url();
+                }
             }
         }
 
@@ -358,6 +392,7 @@ class MessageScheduler
             $content
         );
     }
+
 
 
     /**

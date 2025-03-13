@@ -12,7 +12,7 @@ const useCampaignStore = create((set) => ({
         selectedDuration: "",
         startDate: "",
         endDate: "",
-        totalPrice: 0, // Separate price for billboard
+        totalCost: 0, // Separate price for billboard
         mediaType: "image-video",
         mediaUrl: null,
         mediaFile: null,
@@ -59,8 +59,9 @@ const useCampaignStore = create((set) => ({
         billboard: { ...state.billboard, ...filters }
     })),
     setBillboardTotalPrice: (price) => set((state) => ({
-        billboard: { ...state.billboard, totalPrice: parseFloat(price) },
-        totalOrderCost: state.radio.totalCost + state.arcon.cost + parseFloat(price), // Update totalOrderCost
+        radio: { ...state.radio, totalCost: 0 },
+        billboard: { ...state.billboard, totalCost: parseFloat(price) },
+        totalOrderCost: state.billboard.totalCost + state.arcon.cost + parseFloat(price), // Update totalOrderCost
     })),
 
     // Radio actions
@@ -70,18 +71,19 @@ const useCampaignStore = create((set) => ({
     }),
     setRadioTotalCost: (cost) => set((state) => ({
         radio: { ...state.radio, totalCost: parseFloat(cost) },
-        totalOrderCost: state.billboard.totalPrice + state.arcon.cost + parseFloat(cost), // Update totalOrderCost
+        billboard: { ...state.billboard, totalCost: 0 },
+        totalOrderCost: state.radio.totalCost + state.arcon.cost + parseFloat(cost), // Update totalOrderCost
     })),
 
     // Arcon actions
     setArconDetails: (details) => set((state) => ({
         arcon: { ...state.arcon, ...details },
-        totalOrderCost: state.billboard.totalPrice + state.radio.totalCost + (details.cost || 0), // Update totalOrderCost
+        totalOrderCost: state.billboard.totalCost + state.radio.totalCost + (details.cost || 0), // Update totalOrderCost
     })),
 
     // Utility function to calculate total order cost
     calculateTotalOrderCost: () => set((state) => ({
-        totalOrderCost: state.billboard.totalPrice + state.radio.totalCost + state.arcon.cost,
+        totalOrderCost: state.billboard.totalCost + state.radio.totalCost + state.arcon.cost,
     })),
 }));
 

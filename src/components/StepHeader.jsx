@@ -2,17 +2,18 @@ import { Button } from "@/components/ui/button";
 
 const StepHeader = ({ title, onBack }) => {
     return (
-        <div className="w-full border-b pb-4 mb-6">
-            <div className="flex items-center justify-between max-w-screen-xl mx-auto">
+        <div className="w-full border-b pb-3 md:pb-4 mb-4 md:mb-6">
+            <div className="flex items-center max-w-screen-xl mx-auto gap-x-4">
                 <Button
                     variant="outline"
                     onClick={onBack}
-                    className="flex items-center hover:bg-gray-100"
+                    className="flex items-center hover:bg-gray-100 text-xs md:text-sm px-2 py-1 md:px-3 md:py-2"
                 >
                     ← Back
                 </Button>
-                <h2 className="text-2xl font-semibold flex-1 text-center">{title}</h2>
-                <div className="w-[72px]"></div>
+                <div className="text-base sm:text-lg md:text-xl font-semibold flex-1 text-center md:text-left">
+                    {title}
+                </div>
             </div>
         </div>
     );

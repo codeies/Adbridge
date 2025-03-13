@@ -21,6 +21,7 @@ const CampaignBooking = () => {
             { name: 'Select Billboard', icon: Circle },
             { name: 'Duration', icon: Clock },
             { name: 'Schedule', icon: Calendar },
+            { name: 'ARCON Permit', icon: BadgeCheck },
             { name: 'Payment', icon: CreditCard }
         ],
         radio: [
@@ -51,15 +52,15 @@ const CampaignBooking = () => {
     };
 
     const renderStep1 = () => (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Card
                 className="p-6 cursor-pointer hover:bg-gray-50"
                 onClick={() => handleCampaignSelect('billboard')}
             >
                 <CardContent className="flex flex-col items-center space-y-4">
-                    <div className="text-4xl">🏢</div>
-                    <h3 className="text-xl font-semibold">Billboard</h3>
-                    <p className="text-gray-600 text-center">Traditional and digital billboard advertising</p>
+                    <div className="text-3xl md:text-4xl">🏢</div>
+                    <h3 className="text-lg md:text-xl font-semibold">Billboard</h3>
+                    <p className="text-gray-600 text-center text-sm md:text-base">Traditional and digital billboard advertising</p>
                 </CardContent>
             </Card>
             <Card
@@ -67,9 +68,9 @@ const CampaignBooking = () => {
                 onClick={() => handleCampaignSelect('radio')}
             >
                 <CardContent className="flex flex-col items-center space-y-4">
-                    <div className="text-4xl">📻</div>
-                    <h3 className="text-xl font-semibold">Radio</h3>
-                    <p className="text-gray-600 text-center">Radio station advertising spots</p>
+                    <div className="text-3xl md:text-4xl">📻</div>
+                    <h3 className="text-lg md:text-xl font-semibold">Radio</h3>
+                    <p className="text-gray-600 text-center text-sm md:text-base">Radio station advertising spots</p>
                 </CardContent>
             </Card>
             <Card
@@ -77,9 +78,9 @@ const CampaignBooking = () => {
                 onClick={() => handleCampaignSelect('tv')}
             >
                 <CardContent className="flex flex-col items-center space-y-4">
-                    <div className="text-4xl">📺</div>
-                    <h3 className="text-xl font-semibold">TV</h3>
-                    <p className="text-gray-600 text-center">Television advertising campaigns</p>
+                    <div className="text-3xl md:text-4xl">📺</div>
+                    <h3 className="text-lg md:text-xl font-semibold">TV</h3>
+                    <p className="text-gray-600 text-center text-sm md:text-base">Television advertising campaigns</p>
                 </CardContent>
             </Card>
         </div>
@@ -93,7 +94,8 @@ const CampaignBooking = () => {
                 if (currentStep === 2) return <BillboardStep />;
                 if (currentStep === 3) return <BBDurationStep />;
                 if (currentStep === 4) return <BBDateStep />;
-                if (currentStep === 5) return <PaymentStep />;
+                if (currentStep === 5) return <RDArconStep />;
+                if (currentStep === 6) return <PaymentStep />;
                 return null;
 
             case 'radio':

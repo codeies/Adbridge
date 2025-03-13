@@ -37,14 +37,13 @@ class Adbridge_Campaign_Orders_Admin
      */
     public function add_admin_menu()
     {
-        add_menu_page(
-            'Campaign Orders',
-            'Campaign Orders',
-            'manage_options',
-            'adbridge-campaign-orders',
-            array($this, 'render_admin_page'),
-            'dashicons-media-spreadsheet',
-            30
+        add_submenu_page(
+            'edit.php?post_type=campaign', // Parent slug (moves it under "Campaign" post type)
+            'Campaign Orders', // Page title
+            'Campaign Orders', // Menu title
+            'manage_options', // Capability
+            'campaign_orders', // Menu slug
+            array($this, 'render_admin_page') // Callback function
         );
     }
 

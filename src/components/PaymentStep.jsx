@@ -104,15 +104,16 @@ const PaymentStep = () => {
 
             // Save campaign data and get WooCommerce checkout URL
             const response = await axios.post(
-                "http://localhost/wordpress/wp-json/adrentals/v1/create-campaign-order",
+                `${adbridgeData.restUrl}adrentals/v1/create-campaign-order`,
                 formData,
                 {
                     headers: {
-                        'Content-Type': 'multipart/form-data'
-                    }
+                        'Content-Type': 'multipart/form-data',
+                        'X-WP-Nonce': adbridgeData.nonce // Add the nonce here
+                    },
+                    withCredentials: true // Important for cookies/session
                 }
             );
-
             if (response.data.success && response.data.checkout_url) {
                 // Store campaign data in localStorage
                 /*     localStorage.setItem("abountrant_campaign", JSON.stringify({

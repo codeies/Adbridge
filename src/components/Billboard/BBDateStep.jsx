@@ -172,7 +172,7 @@ const BBDateStep = () => {
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                    ிறோம்               </div>
+                                </div>
                             )}
 
                             {billboard.selectedDuration?.includes("monthly") && (

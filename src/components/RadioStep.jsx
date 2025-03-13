@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import useCampaignStore from "@/stores/useCampaignStore";
 import { useEffect, useState } from "react";
 import axios from 'axios';
+import StepHeader from "@/components/StepHeader";
 
 const RadioStep = () => {
     const {
@@ -24,7 +25,7 @@ const RadioStep = () => {
             setError(null);
             try {
                 const type = campaignType === "tv" ? "tv" : "radio"; // Adjust based on campaignType
-                const response = await axios.get(`http://localhost/wordpress/wp-json/adrentals/v1/campaigns?adrentals_type=${type}`);
+                const response = await axios.get(`${adbridgeData.restUrl}adrentals/v1/campaigns?adrentals_type=${type}`);
                 setRadioStations(response.data);
             } catch (err) {
                 setError(err);
@@ -38,12 +39,12 @@ const RadioStep = () => {
     }, [campaignType]);
 
     // Extract unique station types and locations from data
-    const stationTypes = ["all", ...new Set(radioStations.map(station => station._adrentals_type))];
+    const stationTypes = ["all", ...new Set(radioStations.flatMap(station => station.adrental_category))];
     const locations = ["all", ...new Set(radioStations.flatMap(station => station.adrental_location))];
 
     // Corrected filtering logic
     const filteredStations = radioStations.filter((r) => {
-        const matchesType = radio.selectedCategory === "all" || r._adrentals_type === radio.selectedCategory;
+        const matchesType = radio.selectedCategory === "all" || r.adrental_category?.includes(radio.selectedCategory);
         const matchesLocation = radio.selectedLocation === "all" || r.adrental_location?.includes(radio.selectedLocation);
         const matchesSearch = radio.searchTerm ? r.title?.toLowerCase().includes(radio.searchTerm.toLowerCase()) : true;
 
@@ -59,8 +60,14 @@ const RadioStep = () => {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center space-x-4">
+        <div className="space-y-6 relative">
+
+            <StepHeader
+                title={campaignType === "tv" ? "Select TV Channel" : "Select Radio Station"}
+                onBack={() => setCurrentStep(1)}
+            />
+
+            {/*             <div className="flex items-center space-x-4">
                 <Button
                     variant="outline"
                     onClick={() => setCurrentStep(1)}
@@ -71,7 +78,7 @@ const RadioStep = () => {
                 <h2 className="text-2xl font-semibold">
                     {campaignType === "tv" ? "Select TV Channel" : "Select Radio Station"}
                 </h2>
-            </div>
+            </div> */}
 
             <p className="text-gray-600">
                 {campaignType === "tv"
@@ -80,8 +87,9 @@ const RadioStep = () => {
             </p>
 
             {/* Search & Filters */}
-            <div className="flex flex-wrap gap-4 mb-6">
-                <div className="flex-1 min-w-[200px]">
+            <div className="grid gap-4 mb-6 sm:grid-cols-2 md:flex md:flex-wrap">
+                {/* Search Input */}
+                <div className="flex-1 min-w-[150px] sm:min-w-[200px]">
                     <Input
                         type="text"
                         placeholder={`Search ${campaignType === "tv" ? "TV Channels" : "Radio Stations"}...`}
@@ -92,39 +100,44 @@ const RadioStep = () => {
                 </div>
 
                 {/* Dynamic Station Type Filter */}
-                <Select
-                    value={radio.selectedCategory}
-                    onValueChange={(value) => setRadioFilters({ selectedCategory: value })}
-                >
-                    <SelectTrigger className="w-48 min-w-[150px]">
-                        <SelectValue placeholder="Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {stationTypes.map(type => (
-                            <SelectItem key={type} value={type}>
-                                {type.charAt(0).toUpperCase() + type.slice(1)}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <div className="relative z-20 min-w-[130px] sm:min-w-[150px]">
+                    <Select
+                        value={radio.selectedCategory}
+                        onValueChange={(value) => setRadioFilters({ selectedCategory: value })}
+                    >
+                        <SelectTrigger className="w-full sm:w-48">
+                            <SelectValue placeholder="Type" />
+                        </SelectTrigger>
+                        <SelectContent position="popper" className="w-full sm:w-48">
+                            {stationTypes.map(type => (
+                                <SelectItem key={type} value={type}>
+                                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
 
                 {/* Dynamic Location Filter */}
-                <Select
-                    value={radio.selectedLocation}
-                    onValueChange={(value) => setRadioFilters({ selectedLocation: value })}
-                >
-                    <SelectTrigger className="w-48 min-w-[150px]">
-                        <SelectValue placeholder="Location" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {locations.map(location => (
-                            <SelectItem key={location} value={location}>
-                                {location.charAt(0).toUpperCase() + location.slice(1)}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <div className="relative z-20 min-w-[130px] sm:min-w-[150px]">
+                    <Select
+                        value={radio.selectedLocation}
+                        onValueChange={(value) => setRadioFilters({ selectedLocation: value })}
+                    >
+                        <SelectTrigger className="w-full sm:w-48">
+                            <SelectValue placeholder="Location" />
+                        </SelectTrigger>
+                        <SelectContent position="popper" className="w-full sm:w-48">
+                            {locations.map(location => (
+                                <SelectItem key={location} value={location}>
+                                    {location.charAt(0).toUpperCase() + location.slice(1)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
+
 
             {/* Stations List */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -138,7 +151,15 @@ const RadioStep = () => {
                         }}
                     >
                         <CardContent className="p-4">
-                            <div className="aspect-video bg-gray-200 mb-4 rounded"></div>
+                            {station.featured_image && station.featured_image !== false ? (
+                                <img
+                                    src={station.featured_image}
+                                    alt={station.title}
+                                    className="w-full h-auto mb-4 rounded"
+                                />
+                            ) : (
+                                <div className="aspect-video bg-gray-200 mb-4 rounded"></div>
+                            )}
                             <h3 className="font-semibold">{station.title}</h3>
                             {station.attributes?.map((attr, index) => (
                                 <p key={index} className="text-sm text-gray-600">
@@ -146,6 +167,7 @@ const RadioStep = () => {
                                 </p>
                             ))}
                         </CardContent>
+
                     </Card>
                 ))}
             </div>

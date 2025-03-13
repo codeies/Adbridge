@@ -8,6 +8,7 @@ import { Upload, ChevronLeft, Video } from "lucide-react";
 import useCampaignStore from "@/stores/useCampaignStore";
 import axios from "axios";
 import { useStore } from 'zustand';
+import StepHeader from "@/components/StepHeader";
 
 // Memoized components
 const ScriptTypeSelector = memo(({ scriptType, setScriptType }) => (
@@ -183,7 +184,7 @@ const RDDateStep = () => {
         if (!radio.selectedStation?.id) return;
         try {
             const response = await axios.get(
-                `http://localhost/wordpress/wp-json/adrentals/v1/campaign/${radio.selectedStation.id}`
+                `${adbridgeData.restUrl}adrentals/v1/campaign/${radio.selectedStation.id}`
             );
             setSessions(response.data);
         } catch (error) {
@@ -281,7 +282,13 @@ const RDDateStep = () => {
 
     return (
         <div className="max-w-5xl mx-auto p-6 space-y-6">
-            <div className="flex items-center justify-between mb-8">
+
+            <StepHeader
+                title="Create Campaign"
+                onBack={handleBack}
+            />
+
+            {/*     <div className="flex items-center justify-between mb-8">
                 <div className="space-y-1">
                     <h2 className="text-3xl font-bold">Create Campaign</h2>
                     <p className="text-gray-500">Configure campaign details</p>
@@ -290,7 +297,7 @@ const RDDateStep = () => {
                     <ChevronLeft className="h-4 w-4" />
                     Back
                 </Button>
-            </div>
+            </div> */}
 
             <ScriptTypeSelector scriptType={scriptType} setScriptType={setScriptType} />
 

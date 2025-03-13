@@ -7,19 +7,19 @@ import { Button } from "@/components/ui/button";
 import useCampaignStore from "@/stores/useCampaignStore";
 import StepHeader from '../StepHeader';
 
-const CampaignPreview = ({ radio, arcon }) => (
+const CampaignPreview = ({ radio, arcon, totalCost }) => (
     <Card className="bg-gray-50 h-full">
         <CardContent className="p-4">
             <h3 className="font-semibold mb-4">Campaign Preview</h3>
             <div className="space-y-3">
-                <div>
+                {/* <div>
                     <p className="text-sm text-gray-500">Selected Station</p>
                     <p className="text-sm font-medium">{radio.selectedStation?.name || '-'}</p>
                 </div>
                 <div>
                     <p className="text-sm text-gray-500">Time Slot</p>
                     <p className="text-sm font-medium">{radio.selectedTimeSlot?.name || '-'}</p>
-                </div>
+                </div> */}
                 <div>
                     <p className="text-sm text-gray-500">ARCON Status</p>
                     <p className="text-sm font-medium">
@@ -40,10 +40,14 @@ const CampaignPreview = ({ radio, arcon }) => (
                         <p className="text-sm font-medium">{arcon.permitFile.name}</p>
                     </div>
                 )}
+                <div>
+                    <p className="text-sm text-gray-500">ARCON Cost</p>
+                    <p className="text-sm font-medium">₦{(arcon?.cost || 0)}</p>
+                </div>
                 <div className="pt-4 border-t">
                     <p className="text-sm text-gray-500">Total Cost</p>
                     <p className="text-lg font-semibold">
-                        ₦{((radio.selectedTimeSlot?.cost || 0) + (arcon?.cost || 0)).toLocaleString()}
+                        ₦{totalCost.toLocaleString()}
                     </p>
                 </div>
             </div>
@@ -56,8 +60,12 @@ const RDArconStep = () => {
     const {
         radio,
         arcon = {}, // Default to empty object to avoid undefined errors
+        campaignType,
+        billboard,
         setArconDetails,
         setCurrentStep,
+        currentStep,
+        totalOrderCost,
     } = useCampaignStore();
 
     const handleArconStatusChange = (value) => {
@@ -78,8 +86,13 @@ const RDArconStep = () => {
             event.target.value = '';
         }
     };
+    let arconTerms; // Declare outside the block
 
-    const arconTerms = radio.selectedStation?.acron || [];
+    if (campaignType !== 'billboard') {
+        arconTerms = radio.selectedStation?.acron || [];
+    } else {
+        arconTerms = billboard.selectedBillboard?.acron || [];
+    }
 
     const isNextDisabled = () => {
         if (arcon.status === "needPermit" && !arcon.selectedPermit) return true;
@@ -199,7 +212,7 @@ const RDArconStep = () => {
                                 Back
                             </Button>
                             <Button
-                                onClick={() => setCurrentStep(5)}
+                                onClick={() => setCurrentStep(currentStep + 1)}
                                 disabled={isNextDisabled()}
                                 className="px-6 bg-blue-600 hover:bg-blue-700 text-white"
                             >
@@ -209,7 +222,7 @@ const RDArconStep = () => {
                     </Card>
                 </div>
                 <div className="lg:col-span-1">
-                    <CampaignPreview radio={radio} arcon={arcon} />
+                    <CampaignPreview radio={radio} arcon={arcon} totalCost={totalOrderCost} />
                 </div>
             </div>
         </div>

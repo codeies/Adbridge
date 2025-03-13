@@ -27,9 +27,26 @@ class AdBridge_Campaign_Order
 
         add_action('rest_api_init', [$this, 'register_api_routes']);
         add_action('woocommerce_order_status_changed', [$this, 'update_campaign_order_status'], 10, 4);
-        add_action('wp_scheduled_delete', [$this, 'cleanup_old_abandoned_campaigns']);
+
+
+
+        //add_action('wp_scheduled_delete', [$this, 'cleanup_old_abandoned_campaigns']);
     }
 
+    function customize_cart_item_details($cart)
+    {
+        // Remove unnecessary admin/AJAX checks
+        if (is_admin() && !defined('DOING_AJAX')) return;
+
+        // Loop through cart items
+        foreach ($cart->get_cart() as $cart_item_key => $cart_item) {
+            // Check if the cart item has the custom campaign data
+            if (isset($cart_item['campaign_id']) && isset($cart_item['total_cost'])) {
+                $cart_item['data']->set_price($cart_item['total_cost']);
+                $cart_item['data']->set_name($cart_item['custom_title']);
+            }
+        }
+    }
     public static function get_instance()
     {
         if (self::$instance === null) {
@@ -70,21 +87,19 @@ class AdBridge_Campaign_Order
 
     public function register_api_routes()
     {
+
         register_rest_route('adrentals/v1', '/create-campaign-order', [
             'methods' => 'POST',
             'callback' => [$this, 'handle_campaign_order'],
-            'permission_callback' => '__return_true',
+            'permission_callback' => function () {
+                return is_user_logged_in();
+            },
         ]);
     }
 
     private function get_or_create_product()
     {
-        $product_id = get_option('_adrental_product_id');
-        if ($product_id && get_post_status($product_id) === 'publish') {
-            return $product_id;
-        }
-
-        // Add product creation logic here if needed
+        $product_id = get_option('_adbridge_wc_product');
         return $product_id;
     }
 
@@ -234,18 +249,28 @@ class AdBridge_Campaign_Order
 
     public function handle_campaign_order($request)
     {
+        defined('WC_ABSPATH') || exit;
+
+        // Load cart functions which are loaded only on the front-end.
+        include_once WC_ABSPATH . 'includes/wc-cart-functions.php';
+        include_once WC_ABSPATH . 'includes/class-wc-cart.php';
+
+        if (is_null(WC()->cart)) {
+            wc_load_cart();
+        }
+
         global $wpdb;
         $params = $request->get_params();
         $params = $params['campaign_data'];
+
         if (is_string($params)) {
-            $params = json_decode($params, true); // true returns an array, not an object
+            $params = json_decode($params, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 error_log('JSON decode error in save_media_file: ' . json_last_error_msg());
-                return false; // Exit gracefully if decoding fails
+                return false;
             }
         }
 
-        //    die();
         $campaign_id = uniqid('camp_');
 
         // Save media files
@@ -258,7 +283,7 @@ class AdBridge_Campaign_Order
             'campaign_type' => sanitize_text_field($params['campaign_type']),
             'campaign_data' => json_encode($params),
             'media_file' => $media_file_id ? (string)$media_file_id : null,
-            'arcon_permit' => $arcon_permit_id ? (string)$arcon_permit_id : null, // Add this column to your DB
+            'arcon_permit' => $arcon_permit_id ? (string)$arcon_permit_id : null,
             'total_cost' => floatval($params['total_cost']),
             'start_date' => sanitize_text_field($params['campaign_details']['start_date'] ?? $params[$params['campaign_type']]['startDate'] ?? null),
             'end_date' => sanitize_text_field($params['campaign_details']['end_date'] ?? $params[$params['campaign_type']]['endDate'] ?? null),
@@ -271,35 +296,53 @@ class AdBridge_Campaign_Order
             ['%s', '%s', '%s', '%s', '%f', '%s', '%s', '%s']
         );
 
-        $order = wc_create_order();
+        $adbridge_order_id = $wpdb->insert_id; // Get the inserted ID
 
-        $order->add_product(wc_get_product($this->product_id), 1, ['subtotal' => $params['total_cost'], 'total' => $params['total_cost']]);
-        $order->calculate_totals();
-
-        update_post_meta($order->get_id(), '_campaign_id', $campaign_id);
-
-        $wpdb->update(
-            $this->table_name,
-            ['wc_order_id' => $order->get_id()],
-            ['campaign_id' => $campaign_id],
-            ['%d'],
-            ['%s']
-        );
-
-        $media_url = null;
-        if ($media_file_path && is_numeric($media_file_path)) {
-            $media_url = wp_get_attachment_url((int)$media_file_path);
+        $user_id = get_current_user_id();
+        if ($user_id <= 0) {
+            error_log('User is not logged in');
+            return ['success' => false, 'message' => 'User not logged in'];
         }
 
-        return [
-            'success' => true,
+        // **Add product to cart instead of creating order**
+        //WC()->cart->empty_cart(); // Optional: Clear existing cart
+        $product_id = $this->product_id;
+
+        $cart_item_data = [
             'campaign_id' => $campaign_id,
-            'order_id' => $order->get_id(),
-            'checkout_url' => $order->get_checkout_payment_url(),
-            'media_file_id' => $media_file_path ? (int)$media_file_path : null,
-            'media_url' => $media_url,
+            'custom_title' => "Campaign ID : 1123123123" . $campaign_id,
+            'total_cost' => $params['total_cost'],
+            'unique_key' => md5(microtime() . rand())
         ];
+
+        // Add the product to the cart with custom cart item data
+        $cart_item_key = WC()->cart->add_to_cart($product_id, 1, 0, [], $cart_item_data);
+
+
+        if ($cart_item_key) {
+            error_log('Product added to cart. Cart item key: ' . $cart_item_key);
+            error_log('Cart contents: ' . print_r(WC()->cart->get_cart(), true));
+        } else {
+            error_log('Failed to add product to cart.');
+        }
+
+        if ($cart_item_key) {
+            echo 'hello';
+            // Successfully added to cart
+            return [
+                'success' => true,
+                'campaign_id' => $campaign_id,
+                'checkout_url' => wc_get_checkout_url(),
+            ];
+        } else {
+            // Failed to add to cart
+            return [
+                'success' => false,
+                'message' => 'Failed to add product to cart',
+            ];
+        }
     }
+
 
     public function update_campaign_order_status($order_id, $old_status, $new_status, $order)
     {

@@ -19,13 +19,13 @@ const BBDurationStep = () => {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4 md:space-y-6">
             <StepHeader
                 title="Select Duration"
                 onBack={handleBack}
             />
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                 {durations.map(({ key, label }) => (
                     <Card
                         key={key}
@@ -35,9 +35,11 @@ const BBDurationStep = () => {
                             setCurrentStep(4); // Move to the next step
                         }}
                     >
-                        <CardContent className="p-4">
-                            <h3 className="font-semibold">{label}</h3>
-                            <p className="text-sm text-gray-600">${billboard.selectedBillboard?.pricing[key]} / {label.toLowerCase()}</p>
+                        <CardContent className="p-3 md:p-4">
+                            <h3 className="text-sm md:text-base font-semibold">{label}</h3>
+                            <p className="text-xs md:text-sm text-gray-600">
+                                ${billboard.selectedBillboard?.pricing[key]} / {label.toLowerCase()}
+                            </p>
                         </CardContent>
                     </Card>
                 ))}

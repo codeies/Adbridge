@@ -1,24 +1,46 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# Ignore system files
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+
+# Ignore Composer dependencies and cache
+/vendor/
+composer.lock
+composer.phar
+
+# Ignore environment and configuration files
+.env
+.env.*.local
+
+# Ignore Laravel-specific files (if applicable)
+storage/
+bootstrap/cache/
+
+# Ignore logs and debugging files
+*.log
+*.cache
+*.tmp
+*.swp
+*.swo
+
+# Ignore IDE and editor files
+*.vscode/
+*.idea/
+*.phpstorm.meta.php
+nbproject/
+
+# Ignore node_modules (if frontend assets exist)
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Ignore PHPUnit and test artifacts
+phpunit.xml
+phpunit.xml.dist
+coverage/
+tests/_output/
+
+# Ignore deployment and backup files
+*.bak
+*.sql
+*.sql.gz

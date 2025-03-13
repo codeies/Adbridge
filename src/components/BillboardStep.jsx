@@ -19,11 +19,13 @@ const BillboardStep = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        axios.get("http://localhost/wordpress/wp-json/adrentals/v1/campaigns?adrentals_type=billboard")
+        axios.get(`${adbridgeData.restUrl}adrentals/v1/campaigns?adrentals_type=billboard`)
             .then(response => {
                 const formattedBillboards = response.data.map(item => ({
                     id: item.id,
                     name: item.title,
+                    acron: item.acron,
+                    featured_image: item.featured_image,
                     category: (item.adrental_category && item.adrental_category[0]) || "Unknown",
                     location: (item.adrental_location && item.adrental_location[0]) || "Unknown",
                     pricing: {
@@ -66,8 +68,9 @@ const BillboardStep = () => {
                 onBack={handleBack}
             />
 
-            <div className="flex gap-4 mb-6">
-                <div className="flex-1">
+            <div className="grid gap-4 mb-6 sm:grid-cols-2 md:flex md:flex-wrap">
+                {/* Search Input */}
+                <div className="flex-1 min-w-[150px] sm:min-w-[200px]">
                     <Input
                         type="text"
                         placeholder="Search billboards..."
@@ -76,42 +79,51 @@ const BillboardStep = () => {
                         className="w-full"
                     />
                 </div>
-                <Select
-                    value={billboard.selectedCategory}
-                    onValueChange={(value) => setBillboardFilters({ selectedCategory: value })}
-                >
-                    <SelectTrigger className="w-48">
-                        <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {categories.map(category => (
-                            <SelectItem key={category} value={category}>
-                                {category.charAt(0).toUpperCase() + category.slice(1)}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <Select
-                    value={billboard.selectedLocation}
-                    onValueChange={(value) => setBillboardFilters({ selectedLocation: value })}
-                >
-                    <SelectTrigger className="w-48">
-                        <SelectValue placeholder="Location" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {locations.map(location => (
-                            <SelectItem key={location} value={location}>
-                                {location.charAt(0).toUpperCase() + location.slice(1)}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+
+                {/* Category Filter */}
+                <div className="relative z-20 min-w-[130px] sm:min-w-[150px]">
+                    <Select
+                        value={billboard.selectedCategory}
+                        onValueChange={(value) => setBillboardFilters({ selectedCategory: value })}
+                    >
+                        <SelectTrigger className="w-full sm:w-48">
+                            <SelectValue placeholder="Category" />
+                        </SelectTrigger>
+                        <SelectContent position="popper" className="w-full sm:w-48">
+                            {categories.map(category => (
+                                <SelectItem key={category} value={category}>
+                                    {category.charAt(0).toUpperCase() + category.slice(1)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {/* Location Filter */}
+                <div className="relative z-20 min-w-[130px] sm:min-w-[150px]">
+                    <Select
+                        value={billboard.selectedLocation}
+                        onValueChange={(value) => setBillboardFilters({ selectedLocation: value })}
+                    >
+                        <SelectTrigger className="w-full sm:w-48">
+                            <SelectValue placeholder="Location" />
+                        </SelectTrigger>
+                        <SelectContent position="popper" className="w-full sm:w-48">
+                            {locations.map(location => (
+                                <SelectItem key={location} value={location}>
+                                    {location.charAt(0).toUpperCase() + location.slice(1)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
+
 
             {loading ? (
                 <p>Loading billboards...</p>
             ) : (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredBillboards.map((billboard) => (
                         <Card
                             key={billboard.id}
@@ -122,11 +134,20 @@ const BillboardStep = () => {
                                 setCurrentStep(3);
                             }}
                         >
-                            <CardContent className="p-4">
-                                <div className="aspect-video bg-gray-200 mb-4 rounded"></div>
-                                <h3 className="font-semibold">{billboard.name}</h3>
-                                <p className="text-sm text-gray-600">Location: {billboard.location}</p>
-                                <p className="text-sm font-semibold mt-2">${billboard.pricing.daily}/day</p>
+                            <CardContent className="p-3 md:p-4">
+                                {/* Billboard Image */}
+                                {billboard.featured_image && billboard.featured_image !== false ? (
+                                    <img
+                                        src={billboard.featured_image}
+                                        alt={billboard.title}
+                                        className="w-full h-auto mb-3 md:mb-4 rounded"
+                                    />
+                                ) : (
+                                    <div className="aspect-video bg-gray-200 mb-3 md:mb-4 rounded"></div>
+                                )}
+                                <h3 className="font-semibold text-sm md:text-base">{billboard.name}</h3>
+                                <p className="text-xs md:text-sm text-gray-600">Location: {billboard.location}</p>
+                                <p className="text-xs md:text-sm font-semibold mt-2">${billboard.pricing.daily}/day</p>
                             </CardContent>
                         </Card>
                     ))}
