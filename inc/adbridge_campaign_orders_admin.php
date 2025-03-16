@@ -113,6 +113,7 @@ class Adbridge_Campaign_Orders_Admin
                 padding: 20px;
                 border: 1px solid #888;
                 width: 80%;
+                max-width:900px;
                 max-height: 80%;
                 overflow-y: auto;
             }
@@ -191,9 +192,9 @@ class Adbridge_Campaign_Orders_Admin
         <div class="wrap">
             <h1>Campaign Orders</h1>
 
-            <!-- Filters -->
+            <!-- Filters Section (unchanged) -->
             <div class="campaign-filter">
-                <form method="get">
+                <!--     <form method="get">
                     <input type="hidden" name="page" value="adbridge-campaign-orders">
 
                     <label for="status">Status:</label>
@@ -217,7 +218,7 @@ class Adbridge_Campaign_Orders_Admin
                     </select>
 
                     <button type="submit" class="button">Filter</button>
-                </form>
+                </form> -->
 
                 <!-- Export Button -->
                 <div class="export-btn">
@@ -248,7 +249,7 @@ class Adbridge_Campaign_Orders_Admin
                 <tbody>
                     <?php if (empty($campaigns)): ?>
                         <tr>
-                            <td colspan="11">No campaign orders found.</td>
+                            <td colspan="12">No campaign orders found.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($campaigns as $campaign): ?>
@@ -276,7 +277,10 @@ class Adbridge_Campaign_Orders_Admin
                                 </td>
                                 <td>
                                     <?php if (!empty($campaign->arcon_permit)): ?>
-                                        <a href="<?php echo esc_url(wp_get_attachment_url($campaign->arcon_permit)); ?>" target="_blank">View Permit</a>
+                                        <a href="<?php echo esc_url(wp_get_attachment_url($campaign->arcon_permit)); ?>"
+                                            download="permit-<?php echo esc_attr($campaign->campaign_id); ?>.pdf">
+                                            Download Permit
+                                        </a>
                                     <?php else: ?>
                                         —
                                     <?php endif; ?>
@@ -287,7 +291,41 @@ class Adbridge_Campaign_Orders_Admin
                                     <div id="order-modal-<?php echo esc_attr($campaign->id); ?>" class="order-modal">
                                         <div class="order-modal-content">
                                             <span class="close-modal">&times;</span>
-                                            <h2>Campaign Details</h2>
+
+                                            <!-- Customer Details Section -->
+                                            <h3>Customer Information</h3>
+                                            <?php
+                                            $user_id = $campaign->user_id;
+                                            $user = get_userdata($user_id);
+                                            if ($user):
+                                            ?>
+                                                <table class="widefat">
+                                                    <tr>
+                                                        <th>Customer Name</th>
+                                                        <td><?php echo esc_html($user->display_name); ?></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Email</th>
+                                                        <td><?php echo esc_html($user->user_email); ?></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Username</th>
+                                                        <td><?php echo esc_html($user->user_login); ?></td>
+                                                    </tr>
+                                                    <!-- <tr>
+                                                        <th>Registered</th>
+                                                        <td><?php echo esc_html(date('M j, Y', strtotime($user->user_registered))); ?></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Role</th>
+                                                        <td><?php echo esc_html(implode(', ', $user->roles)); ?></td>
+                                                    </tr> -->
+                                                </table>
+                                            <?php else: ?>
+                                                <p>No customer information available.</p>
+                                            <?php endif; ?>
+
+                                            <!-- Basic Information Section -->
                                             <h3>Basic Information</h3>
                                             <table class="widefat">
                                                 <tr>
@@ -308,16 +346,17 @@ class Adbridge_Campaign_Orders_Admin
                                                     <th>Total Cost</th>
                                                     <td><?php echo wc_price($campaign->total_cost); ?></td>
                                                 </tr>
-                                                <tr>
+                                                <!--     <tr>
                                                     <th>Created</th>
                                                     <td><?php echo esc_html(date('F j, Y, g:i a', strtotime($campaign->created_at))); ?></td>
                                                 </tr>
                                                 <tr>
                                                     <th>Last Updated</th>
                                                     <td><?php echo esc_html(date('F j, Y, g:i a', strtotime($campaign->updated_at))); ?></td>
-                                                </tr>
+                                                </tr> -->
                                             </table>
 
+                                            <!-- Campaign Data Section -->
                                             <h3>Campaign Data</h3>
                                             <?php
                                             $campaign_data = json_decode($campaign->campaign_data, true);
@@ -336,16 +375,6 @@ class Adbridge_Campaign_Orders_Admin
                                                     ];
                                                     break;
                                                 case 'radio':
-                                                    $relevant_data = [
-                                                        'Station Name' => $campaign_data['campaign_details']['station_name'],
-                                                        'Session' => $campaign_data['campaign_details']['session'],
-                                                        'Spots' => $campaign_data['campaign_details']['spots'],
-                                                        'Start Date' => $campaign_data['campaign_details']['start_date'],
-                                                        'End Date' => $campaign_data['campaign_details']['end_date'],
-                                                        'Script Type' => $campaign_data['campaign_details']['script_type'],
-                                                        'Jingle Creation Type' => $campaign_data['campaign_details']['jingle_creation_type']
-                                                    ];
-                                                    break;
                                                 case 'tv':
                                                     $relevant_data = [
                                                         'Station Name' => $campaign_data['campaign_details']['station_name'],
@@ -354,8 +383,13 @@ class Adbridge_Campaign_Orders_Admin
                                                         'Start Date' => $campaign_data['campaign_details']['start_date'],
                                                         'End Date' => $campaign_data['campaign_details']['end_date'],
                                                         'Script Type' => $campaign_data['campaign_details']['script_type'],
-                                                        'Jingle Creation Type' => $campaign_data['campaign_details']['jingle_creation_type']
+                                                        'Jingle Creation Type' => $campaign_data['campaign_details']['jingle_creation_type'],
                                                     ];
+
+                                                    // Include 'Jingle Text' only if 'Jingle Creation Type' is 'create'
+                                                    if ($campaign_data['campaign_details']['jingle_creation_type'] === 'create') {
+                                                        $relevant_data['Jingle Text'] = $campaign_data['campaign_details']['jingle_text'];
+                                                    }
                                                     break;
                                                 default:
                                                     $relevant_data = $campaign_data;
@@ -371,22 +405,18 @@ class Adbridge_Campaign_Orders_Admin
                                                 <?php endforeach; ?>
                                             </table>
 
+                                            <!-- Media File Section -->
                                             <?php if (!empty($campaign->media_file)): ?>
                                                 <h3>Media File</h3>
                                                 <?php
                                                 $media_url = wp_get_attachment_url($campaign->media_file);
-                                                $media_type = get_post_mime_type($campaign->media_file);
-                                                if (strpos($media_type, 'image') !== false):
+                                                $media_filename = basename(get_attached_file($campaign->media_file));
                                                 ?>
-                                                    <img src="<?php echo esc_url($media_url); ?>" style="max-width: 100%; height: auto;">
-                                                <?php elseif (strpos($media_type, 'video') !== false): ?>
-                                                    <video controls style="max-width: 100%;">
-                                                        <source src="<?php echo esc_url($media_url); ?>" type="<?php echo esc_attr($media_type); ?>">
-                                                        Your browser does not support the video tag.
-                                                    </video>
-                                                <?php else: ?>
-                                                    <a href="<?php echo esc_url($media_url); ?>" target="_blank">Download Media File</a>
-                                                <?php endif; ?>
+                                                <a href="<?php echo esc_url($media_url); ?>"
+                                                    download="<?php echo esc_attr($media_filename); ?>"
+                                                    class="button">
+                                                    Download Media File
+                                                </a>
                                             <?php endif; ?>
                                         </div>
                                     </div>
@@ -397,7 +427,6 @@ class Adbridge_Campaign_Orders_Admin
                 </tbody>
             </table>
         </div>
-
         <script>
             jQuery(document).ready(function($) {
                 // Modal functionality

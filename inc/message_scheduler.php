@@ -86,10 +86,10 @@ class MessageScheduler
             $adbridge_order_id
         ));
 
-        $order_id = $cart_data->wc_order_id;
-        $order = wc_get_order($order_id);
+        //$order_id = $cart_data->wc_order_id;
+        //$order = wc_get_order($order_id);
 
-        $user_id = $order->get_user_id(); // Get the user ID associated with the order
+        $user_id = $cart_data->user_id; // Get the user ID associated with the order
 
 
         // Get notification configurations
@@ -273,11 +273,31 @@ class MessageScheduler
         foreach ($notifications as $notification) {
             $delay = isset($notification['delay_hours']) ? (int) $notification['delay_hours'] : 0;
             $template_id = isset($notification['template']) ? (int) $notification['template'] : 0;
+            $condition = $notification['condition'] ?? 'all'; // Get the condition
 
             if ($template_id > 0) {
-                $this->scheduleSingleMessage($user_id, $type, $template_id, $delay, $trigger, $meta_data);
+                $this->scheduleSingleMessage(
+                    $user_id,
+                    $type,
+                    $template_id,
+                    $delay,
+                    $trigger,
+                    array_merge($meta_data, ['condition' => $condition]) // Add to metadata
+                );
             }
         }
+    }
+
+    private function userHasPurchase(int $user_id): bool
+    {
+        $orders = wc_get_orders([
+            'customer_id' => $user_id,
+            'status' => ['completed', 'processing'], // Adjust based on your requirements
+            'limit' => 1,
+            'return' => 'ids',
+        ]);
+
+        return !empty($orders);
     }
 
     /**
@@ -285,6 +305,7 @@ class MessageScheduler
      */
     private function scheduleSingleMessage(int $user_id, string $type, int $template_id, int $delay_hours, string $trigger, array $meta_data = []): void
     {
+
         $timestamp = time() + ($delay_hours * HOUR_IN_SECONDS);
 
         // Generate unique hook ID
@@ -325,9 +346,22 @@ class MessageScheduler
             return;
         }
 
+        $condition = $message_data['meta_data']['condition'] ?? 'all';
+        if ($condition !== 'all') {
+            $has_purchase = $this->userHasPurchase($user_id);
+
+            // Determine if we should skip sending
+            if (($condition === 'has_purchase' && !$has_purchase) ||
+                ($condition === 'no_purchase' && $has_purchase)
+            ) {
+                delete_user_meta($user_id, "scheduled_message_{$hook_id}");
+                return;
+            }
+        }
+
         // Process message content
         $message = $this->processTemplate($template->post_content, $user, $message_data['meta_data'] ?? []);
-        $subject = get_post_meta($template_id, '_template_subject', true);
+        $subject = get_the_title($template_id);
 
         // Send message based on type
         if ($message_data['type'] === self::TYPE_SMS) {
@@ -352,33 +386,78 @@ class MessageScheduler
 
         // Basic user placeholders
         $placeholders = [
-            '{{user_name}}' => $user->display_name,
-            '{{user_email}}' => $user->user_email,
-            '{{user_phone}}' => get_user_meta($user->ID, 'phone', true),
-            '{{first_name}}' => $user->first_name,
-            '{{last_name}}' => $user->last_name,
+            '{user_name}' => $user->display_name,
+            '{user_email}' => $user->user_email,
+            '{user_phone}' => get_user_meta($user->ID, 'phone', true),
+            '{first_name}' => $user->first_name,
+            '{last_name}' => $user->last_name,
         ];
 
-        // Order-related placeholders (fetching from wp_adbridge_campaign_order table)
+        // Order-related placeholders (fetching from dynamically prefixed table)
         if (isset($meta_data['order_id'])) {
+            $table_name = $wpdb->prefix . 'adbridge_campaign_order'; // Using dynamic table prefix
+
             $order_data = $wpdb->get_row(
-                $wpdb->prepare("SELECT * FROM wp_adbridge_campaign_order WHERE wc_order_id = %d", $meta_data['order_id']),
+                $wpdb->prepare("SELECT * FROM {$table_name} WHERE wc_order_id = %d", $meta_data['order_id']),
                 ARRAY_A
             );
 
             if ($order_data) {
-                $placeholders['{{order_id}}'] = $order_data['wc_order_id'];
-                $placeholders['{{order_total}}'] = $order_data['total_cost'];
-                $placeholders['{{order_date}}'] = date_i18n(get_option('date_format'), strtotime($order_data['created_at']));
-                $placeholders['{{campaign_id}}'] = $order_data['campaign_id'];
-                $placeholders['{{campaign_type}}'] = $order_data['campaign_type'];
-                $placeholders['{{campaign_start_date}}'] = date_i18n(get_option('date_format'), strtotime($order_data['start_date']));
-                $placeholders['{{campaign_end_date}}'] = date_i18n(get_option('date_format'), strtotime($order_data['end_date']));
+                $placeholders += [
+                    '{order_id}' => $order_data['wc_order_id'],
+                    '{order_total}' => $order_data['total_cost'],
+                    '{order_date}' => date_i18n(get_option('date_format'), strtotime($order_data['created_at'])),
+                    '{campaign_id}' => $order_data['campaign_id'],
+                    '{campaign_type}' => ucfirst($order_data['campaign_type']), // Capitalizing first letter
+                    '{campaign_start_date}' => date_i18n(get_option('date_format'), strtotime($order_data['start_date'])),
+                    '{campaign_end_date}' => date_i18n(get_option('date_format'), strtotime($order_data['end_date'])),
+                    '{campaign_status}' => $order_data['campaign_status'],
+                    '{campaign_arcon_permit}' => $order_data['arcon_permit'],
+                ];
+
+                if (!empty($order_data['campaign_data'])) {
+                    $campaign_data = json_decode($order_data['campaign_data'], true);
+                    $campaign_details = $campaign_data['campaign_details'] ?? [];
+
+                    // General campaign placeholders
+                    $placeholders['{campaign_name}'] = $campaign_details['station_name'] ?? $campaign_details['billboard_name'] ?? 'N/A';
+                    $placeholders['{campaign_duration}'] = $campaign_details['duration'] ?? $campaign_details['duration_type'] ?? 'N/A';
+                    $placeholders['{campaign_location}'] = $campaign_details['location'] ?? 'N/A';
+                    $placeholders['{campaign_media_type}'] = $campaign_details['media_type'] ?? 'N/A';
+                    $placeholders['{campaign_media_url}'] = $campaign_details['media_url'] ?? 'N/A';
+
+                    // Dynamic content for different campaign types
+                    $extraDetails = '';
+
+                    if ($order_data['campaign_type'] === 'radio') {
+                        $extraDetails .= "🎙 ** Radio Campaign Details:**\n";
+                        $extraDetails .= "- Number of Ad Spots: " . ($campaign_details['spots'] ?? 'N/A') . "\n";
+                        $extraDetails .= "- Session: " . ($campaign_details['session'] ?? 'N/A') . "\n";
+                        $extraDetails .= "- Script Type: " . ($campaign_details['script_type'] ?? 'N/A') . "\n";
+                        $extraDetails .= "- Jingle Text: " . ($campaign_details['jingle_text'] ?? 'N/A') . "\n";
+                    } elseif ($order_data['campaign_type'] === 'tv') {
+                        $extraDetails .= "📺 **TV Campaign Details:**\n";
+                        $extraDetails .= "- Channel Name: " . ($campaign_details['channel_name'] ?? 'N/A') . "\n";
+                        $extraDetails .= "- Number of Airings: " . ($campaign_details['airings'] ?? 'N/A') . "\n";
+                        $extraDetails .= "- Airing Time: " . ($campaign_details['airing_time'] ?? 'N/A') . "\n";
+                        $extraDetails .= "- Ad Duration: " . ($campaign_details['ad_duration'] ?? 'N/A') . "\n";
+                    } elseif ($order_data['campaign_type'] === 'billboard') {
+                        $extraDetails .= "🛑 **Billboard Campaign Details:**\n";
+                        $extraDetails .= "- Duration Type: " . ($campaign_details['duration_type'] ?? 'N/A') . "\n";
+                        $extraDetails .= "- Number of Days: " . ($campaign_details['num_days'] ?? 'N/A') . "\n";
+                        $extraDetails .= "- Number of Weeks: " . ($campaign_details['num_weeks'] ?? 'N/A') . "\n";
+                        $extraDetails .= "- Number of Months: " . ($campaign_details['num_months'] ?? 'N/A') . "\n";
+                    }
+
+                    // Add extra details placeholder
+                    $placeholders['{campaign_extra_details}'] = nl2br($extraDetails);
+                }
+
 
                 // Generate checkout URL if WooCommerce order exists
                 $order = wc_get_order($order_data['wc_order_id']);
                 if ($order) {
-                    $placeholders['{{checkout_url}}'] = $order->get_checkout_payment_url();
+                    $placeholders['{checkout_url}'] = $order->get_checkout_payment_url();
                 }
             }
         }
@@ -392,6 +471,8 @@ class MessageScheduler
             $content
         );
     }
+
+
 
 
 

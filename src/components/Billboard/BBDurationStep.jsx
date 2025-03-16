@@ -38,7 +38,7 @@ const BBDurationStep = () => {
                         <CardContent className="p-3 md:p-4">
                             <h3 className="text-sm md:text-base font-semibold">{label}</h3>
                             <p className="text-xs md:text-sm text-gray-600">
-                                ${billboard.selectedBillboard?.pricing[key]} / {label.toLowerCase()}
+                                {adbridgeData.currency} {billboard.selectedBillboard?.pricing[key]} / {label.toLowerCase()}
                             </p>
                         </CardContent>
                     </Card>

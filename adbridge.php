@@ -5,7 +5,7 @@
  * Description: AdBridge 
  * Author URI:  https://codeies.com
  * Plugin URI:  https://codeies.com
- * Version:     1.0.0
+ * Version:     1.1.0
  * Author:      Codeies
  * Text Domain: adbridge
  * Domain Path: /i18n
@@ -48,7 +48,7 @@ class AdBridge
     public function adbridge_booking_shortcode()
     {
         if (!is_user_logged_in()) {
-            $login_url = wp_login_url(get_permalink());
+            $login_url = wc_get_page_permalink('myaccount'); // WooCommerce My Account login page
             return '<p>You must be <a href="' . esc_url($login_url) . '">logged in</a> to access this page.</p>';
         }
 
@@ -59,6 +59,7 @@ class AdBridge
         include_once(plugin_dir_path(__FILE__) . "/inc/frontend.php");
         return ob_get_clean();
     }
+
 
     function loadScriptAsModule($tag, $handle, $src)
     {
@@ -88,8 +89,8 @@ class AdBridge
         $debug = true;
 
         if (!$debug) {
-            wp_enqueue_style('adrentals-style', plugin_dir_url(__FILE__) . '/dist/assets/index-1060073d.css', [], '1.0', 'all');
-            wp_enqueue_script('adbridge-react-core', plugin_dir_url(__FILE__) . '/dist/assets/index-463f7eca.js', [], '1.0', true);
+            wp_enqueue_style('adrentals-style', plugin_dir_url(__FILE__) . '/dist/assets/index-6e5337b5.css', [], '1.0', 'all');
+            wp_enqueue_script('adbridge-react-core', plugin_dir_url(__FILE__) . '/dist/assets/index-200ee780.js', [], '1.0', true);
         } else {
             wp_register_script('adbridge-react-core', 'http://localhost:5173/src/main.jsx', ['adbridge-react-script'], time(), true);
         }
@@ -105,8 +106,12 @@ class AdBridge
         wp_localize_script('adbridge-react-core', 'adbridgeData', [
             'restUrl'   => esc_url_raw(rest_url()),
             'ajaxUrl'   => esc_url_raw(admin_url('admin-ajax.php')),
-            'nonce'     => wp_create_nonce('wp_rest'),
+            'nonce'     => wp_create_nonce('adbridge_campaign_nonce'),
+            'currency'  => get_woocommerce_currency_symbol(), // Get the current WooCommerce currency symbol
+            'website_title'  => get_bloginfo('name'), // Get the current WooCommerce currency symbol
+            'jingle_creation_cost'  => 50, // Get the current WooCommerce currency symbol
         ]);
+
 
         wp_enqueue_script('adbridge-react-core');
         wp_enqueue_script('adbridge-react-script');
@@ -125,7 +130,9 @@ include_once(plugin_dir_path(__FILE__) . "/inc/woocommerce.php");
 
 function adbridge_campaign_order_install()
 {
-    AdBridge_Campaign_Order::get_instance()->install();
+    $instance = AdBridge_Campaign_Order::get_instance();
+    $instance->install();  // Runs the initial table creation
+    $instance->update_plugin(); // Runs updates if needed
 }
 register_activation_hook(__FILE__, 'adbridge_campaign_order_install');
 

@@ -42,12 +42,12 @@ const CampaignPreview = ({ radio, arcon, totalCost }) => (
                 )}
                 <div>
                     <p className="text-sm text-gray-500">ARCON Cost</p>
-                    <p className="text-sm font-medium">₦{(arcon?.cost || 0)}</p>
+                    <p className="text-sm font-medium">{adbridgeData.currency} {(arcon?.cost || 0)}</p>
                 </div>
                 <div className="pt-4 border-t">
                     <p className="text-sm text-gray-500">Total Cost</p>
                     <p className="text-lg font-semibold">
-                        ₦{totalCost.toLocaleString()}
+                        {adbridgeData.currency} {totalCost.toLocaleString()}
                     </p>
                 </div>
             </div>
@@ -192,9 +192,9 @@ const RDArconStep = () => {
                                                     htmlFor={`arcon-${index}`}
                                                     className="text-sm font-medium cursor-pointer"
                                                 >
-                                                    I agree for MYSOGI to process {arconItem.name} ARCON license for me
+                                                    I agree for {adbridgeData.website_title} to process {arconItem.name} ARCON license for me
                                                     <span className="block text-gray-600 mt-1">
-                                                        (cost: ₦{parseInt(arconItem.cost).toLocaleString()})
+                                                        (cost: {adbridgeData.currency} {parseInt(arconItem.cost).toLocaleString()})
                                                     </span>
                                                 </Label>
                                             </div>

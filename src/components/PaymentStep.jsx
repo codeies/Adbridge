@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,7 +61,7 @@ const PaymentStep = () => {
                     num_weeks: billboard.numWeeks || 0,
                     num_months: billboard.numMonths || 0,
                     location: billboard.selectedBillboard.location,
-                    dimensions: billboard.selectedBillboard.dimensions,
+                    attributes: billboard.selectedBillboard.attributes,
                     start_date: billboard.startDate,
                     end_date: billboard.endDate,
                     media_type: billboard.mediaType,
@@ -68,6 +69,7 @@ const PaymentStep = () => {
                 } : {
                     station_id: radio.selectedStation.id,
                     station_name: radio.selectedStation.title,
+                    attributes: radio.selectedBillboard.attributes,
                     duration: radio.selectedDuration,
                     time_slot: radio.selectedTimeSlot,
                     session: radio.selectedSession,
@@ -92,8 +94,8 @@ const PaymentStep = () => {
                 formData.append('media_file', billboard.mediaFile);
             }
 
-            if ((campaignType === "radio" || campaignType === "tv") && radio.audioFile) {
-                formData.append('media_file', radio.audioFile);
+            if ((campaignType === "radio" || campaignType === "tv") && radio.mediaFile) {
+                formData.append('media_file', radio.mediaFile);
             }
 
 
@@ -102,27 +104,16 @@ const PaymentStep = () => {
                 formData.append('arcon_permit', arcon.permitFile);
             }
 
+            formData.append('action', 'create_campaign_order'); // Add action for WordPress AJAX
+            formData.append('nonce', adbridgeData.nonce);
             // Save campaign data and get WooCommerce checkout URL
-            const response = await axios.post(
-                `${adbridgeData.restUrl}adrentals/v1/create-campaign-order`,
-                formData,
-                {
-                    headers: {
-                        'Content-Type': 'multipart/form-data',
-                        'X-WP-Nonce': adbridgeData.nonce // Add the nonce here
-                    },
-                    withCredentials: true // Important for cookies/session
-                }
-            );
+            const response = await axios.post(adbridgeData.ajaxUrl, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                },
+            });
             if (response.data.success && response.data.checkout_url) {
-                // Store campaign data in localStorage
-                /*     localStorage.setItem("abountrant_campaign", JSON.stringify({
-                        campaign_id: response.data.campaign_id,
-                        order_id: response.data.order_id,
-                        campaign_type: campaignType,
-                        campaign_details: campaignData.campaign_details
-                    }));
-     */
+
                 // Redirect to WooCommerce checkout
                 window.location.href = response.data.checkout_url;
             } else {
@@ -186,8 +177,13 @@ const PaymentStep = () => {
                                     <span className="font-medium">Location:</span>
                                     <span>{billboard.selectedBillboard?.location}</span>
 
-                                    <span className="font-medium">Dimensions:</span>
-                                    <span>{billboard.selectedBillboard?.dimensions}</span>
+                                    {billboard.selectedBillboard?.attributes.map((attr, index) => (
+                                        <React.Fragment key={`attr-${index}`}>
+                                            <span className="font-medium">{attr.attribute}:</span>
+                                            <span>{attr.value}</span>
+                                        </React.Fragment>
+                                    ))}
+
 
                                     <span className="font-medium">Duration Type:</span>
                                     <span className="capitalize">
@@ -223,8 +219,16 @@ const PaymentStep = () => {
                                     <span className="font-medium">{campaignType === "radio" ? "Radio Station:" : "TV Channel:"}</span>
                                     <span>{radio.selectedStation?.title}</span>
 
-                                    <span className="font-medium">Duration:</span>
-                                    <span>{radio.selectedDuration}</span>
+                                    <span className="font-medium">No of Spots:</span>
+                                    <span>{radio.selectedSpots}</span>
+
+                                    {radio.selectedStation?.attributes.map((attr, index) => (
+                                        <React.Fragment key={`attr-${index}`}>
+                                            <span className="font-medium">{attr.attribute}:</span>
+                                            <span>{attr.value}</span>
+                                        </React.Fragment>
+                                    ))}
+
 
                                     {radio.selectedTimeSlot && (
                                         <>
@@ -286,7 +290,7 @@ const PaymentStep = () => {
                             <div className="border-t pt-4 mt-4">
                                 <div className="flex justify-between items-center">
                                     <span className="text-lg font-semibold">Total Amount:</span>
-                                    <span className="text-lg font-bold">${totalOrderCost.toFixed(2)}</span>
+                                    <span className="text-lg font-bold">{adbridgeData.currency} {totalOrderCost.toFixed(2)}</span>
                                 </div>
                             </div>
                         </div>

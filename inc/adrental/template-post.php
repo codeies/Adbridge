@@ -76,29 +76,31 @@ class AdBridgeTemplatePostType
     private function get_variables()
     {
         return array(
-            // User-related placeholders
             'user_name' => 'User Display Name',
             'user_email' => 'User Email Address',
             'user_phone' => 'User Phone Number',
             'first_name' => 'User First Name',
             'last_name' => 'User Last Name',
 
-            // Order-related placeholders
             'order_id' => 'WooCommerce Order ID',
             'order_total' => 'Total Cost of the Order',
             'order_date' => 'Order Creation Date',
-            'checkout_url' => 'Checkout Payment URL',
 
-            // Campaign-related placeholders
             'campaign_id' => 'Campaign ID',
-            'campaign_type' => 'Campaign Type (e.g., Billboard, TV, Radio)',
+            'campaign_type' => 'Campaign Type (Radio/Billboard)',
             'campaign_start_date' => 'Campaign Start Date',
             'campaign_end_date' => 'Campaign End Date',
+            'campaign_status' => 'Campaign Status',
+            'campaign_arcon_permit' => 'ARCON Permit Status',
 
-            // Additional placeholders
-            'channel' => 'Media Channel (e.g., Radio/TV Channel)',
-            'duration' => 'Campaign Duration (e.g., in days/weeks)',
-            'product_url' => 'Product/Abandoned Cart URL',
+            'campaign_name' => 'Campaign Name',
+            'campaign_duration' => 'Campaign Duration',
+            'campaign_location' => 'Campaign Location',
+            'campaign_media_type' => 'Campaign Media Type',
+            'campaign_media_url' => 'Campaign Media URL',
+            'campaign_extra_details' => 'Campaign Extra Details',
+
+            'checkout_url' => 'WooCommerce Checkout Payment URL',
         );
     }
 }

@@ -160,23 +160,23 @@ const DurationPicker = memo(({
 
 const RDDateStep = () => {
     const { radio, setRadioFilters, setCurrentStep, setRadioTotalCost, campaignType } = useCampaignStore();
-    const currentRadioState = useStore(useCampaignStore, (state) => state.radio);
+    //const radio = useStore(useCampaignStore, (state) => state.radio);
 
     // State initialization
-    const [scriptType, setScriptType] = useState(() => currentRadioState.scriptType || null);
+    const [scriptType, setScriptType] = useState(() => radio.scriptType || null);
 
     const [sessions, setSessions] = useState({ jingles: [], announcements: [] });
-    const [selectedSession, setSelectedSession] = useState(() => currentRadioState.selectedSession || "");
-    const [selectedSpots, setSelectedSpots] = useState(() => currentRadioState.selectedSpots || "");
-    const [mediaFile, setMediaFile] = useState(() => currentRadioState.mediaFile || null);
+    const [selectedSession, setSelectedSession] = useState(() => radio.selectedSession || "");
+    const [selectedSpots, setSelectedSpots] = useState(() => radio.selectedSpots || "");
+    const [mediaFile, setMediaFile] = useState(radio.mediaFile || null); // Add mediaFile to state
     const [mediaPreview, setMediaPreview] = useState(null);
-    const [announcement, setAnnouncement] = useState(() => currentRadioState.announcement || "");
-    const [jingleCreationType, setJingleCreationType] = useState(() => currentRadioState.jingleCreationType || "upload");
-    const [jingleText, setJingleText] = useState(() => currentRadioState.jingleText || "");
-    const [startDate, setStartDate] = useState(() => currentRadioState.startDate || "");
-    const [numberOfDays, setNumberOfDays] = useState(() => currentRadioState.numberOfDays || "");
+    const [announcement, setAnnouncement] = useState(() => radio.announcement || "");
+    const [jingleCreationType, setJingleCreationType] = useState(() => radio.jingleCreationType || "upload");
+    const [jingleText, setJingleText] = useState(() => radio.jingleText || "");
+    const [startDate, setStartDate] = useState(() => radio.startDate || "");
+    const [numberOfDays, setNumberOfDays] = useState(() => radio.numberOfDays || "");
 
-    const jingleCreationCost = 50;
+    const jingleCreationCost = adbridgeData.jingle_creation_cost;
     const mediaType = campaignType === "tv" ? "video" : "audio";
 
     // Session data fetching
@@ -200,24 +200,24 @@ const RDDateStep = () => {
     const handleMediaUpload = useCallback((e) => {
         const file = e.target.files[0];
         if (file) {
-            setMediaFile(file);
+            setMediaFile(file); // Store the file object
             setMediaPreview(URL.createObjectURL(file));
         }
     }, []);
 
     // Load announcement message from store when component mounts
     useEffect(() => {
-        if (currentRadioState.announcement) {
-            setAnnouncement(currentRadioState.announcement);
+        if (radio.announcement) {
+            setAnnouncement(radio.announcement);
         }
-    }, [currentRadioState.announcement]);
+    }, [radio.announcement]);
 
     // Set script type based on prior selection or default
     useEffect(() => {
-        if (currentRadioState.scriptType) {
-            setScriptType(currentRadioState.scriptType);
+        if (radio.scriptType) {
+            setScriptType(radio.scriptType);
         }
-    }, [currentRadioState.scriptType]);
+    }, [radio.scriptType]);
 
     // Cost calculation
     const totalCost = useMemo(() => {
@@ -320,7 +320,7 @@ const RDDateStep = () => {
                                 onClick={() => setJingleCreationType("create")}
                                 className="w-full"
                             >
-                                Create Jingle (+${jingleCreationCost})
+                                Create Jingle (+{adbridgeData.currency} {jingleCreationCost})
                             </Button>
                         </div>
                         {jingleCreationType === "upload" ? (

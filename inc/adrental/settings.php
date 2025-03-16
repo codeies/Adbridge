@@ -103,6 +103,13 @@ class AdBridge_Plugin_Options
                 ->set_default_value(24),
             Field::make('select', 'template', __('Template'))
                 ->add_options($templateOptions),
+            Field::make('select', 'condition', 'Send To')
+                ->set_options([
+                    'all' => 'All Users',
+                    'has_purchase' => 'Users with a Purchase',
+                    'no_purchase' => 'Users without a Purchase',
+                ])
+                ->set_default_value('no_purchase'),
         ];
     }
 

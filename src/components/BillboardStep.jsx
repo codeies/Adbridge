@@ -25,6 +25,7 @@ const BillboardStep = () => {
                     id: item.id,
                     name: item.title,
                     acron: item.acron,
+                    attributes: item.attributes,
                     featured_image: item.featured_image,
                     category: (item.adrental_category && item.adrental_category[0]) || "Unknown",
                     location: (item.adrental_location && item.adrental_location[0]) || "Unknown",
@@ -46,15 +47,17 @@ const BillboardStep = () => {
             });
     }, []);
 
-    const categories = ['all', 'digital', 'static'];
-    const locations = ['all', 'downtown', 'highway', 'mall'];
+    const categories = ["all", ...new Set(billboards.flatMap(billboard => billboard.category))];
+    const locations = ["all", ...new Set(billboards.flatMap(billboard => billboard.location))];
 
-    const filteredBillboards = billboards.filter((b) => {
-        const matchesCategory = billboard.selectedCategory === "all" || b.category.toLowerCase() === billboard.selectedCategory;
-        const matchesLocation = billboard.selectedLocation === "all" || b.location.toLowerCase() === billboard.selectedLocation;
-        const matchesSearch = billboard.searchTerm ? b.name.toLowerCase().includes(billboard.searchTerm.toLowerCase()) : true;
-        return matchesCategory && matchesLocation && matchesSearch;
+    const filteredBillboards = billboards.filter((r) => {
+        const matchesType = billboard.selectedCategory === "all" || r.category.includes(billboard.selectedCategory);
+        const matchesLocation = billboard.selectedLocation === "all" || r.location.includes(billboard.selectedLocation);
+        const matchesSearch = billboard.searchTerm ? r.name?.toLowerCase().includes(billboard.searchTerm.toLowerCase()) : true;
+
+        return matchesType && matchesLocation && matchesSearch;
     });
+
 
     const handleBack = () => {
         setCurrentStep(1);
@@ -147,7 +150,13 @@ const BillboardStep = () => {
                                 )}
                                 <h3 className="font-semibold text-sm md:text-base">{billboard.name}</h3>
                                 <p className="text-xs md:text-sm text-gray-600">Location: {billboard.location}</p>
-                                <p className="text-xs md:text-sm font-semibold mt-2">${billboard.pricing.daily}/day</p>
+                                <p className="text-xs md:text-sm font-semibold mt-2">{adbridgeData.currency} {billboard.pricing.daily}/day</p>
+                                {console.log(billboard)}
+                                {billboard.attributes?.map((attr, index) => (
+                                    <p key={index} className="text-sm text-gray-600">
+                                        {attr.attribute}: {attr.value}
+                                    </p>
+                                ))}
                             </CardContent>
                         </Card>
                     ))}

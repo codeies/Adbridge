@@ -115,42 +115,50 @@ const CampaignBooking = () => {
 
     return (
         <div className="max-w-6xl mx-auto p-6">
-            {/* Enhanced Progress Bar */}
-            <div className="mb-8">
-                <div className="relative">
-                    <div className="h-1 bg-gray-200 absolute w-full top-5"></div>
-                    <div
-                        className="h-1 bg-black absolute transition-all duration-300 top-5"
-                        style={{ width: `${(currentStep / getCurrentSteps().length) * 100}%` }}
-                    ></div>
+            {/* Enhanced Responsive Progress Bar with Horizontal Scroll on Mobile */}
+            <div className="mb-8 w-full">
+                <div className="relative overflow-x-auto pb-2">
+                    <div className="min-w-max">
+                        {/* Background track - always visible */}
+                        <div className="h-1 bg-gray-200 absolute w-full top-5"></div>
 
-                    {/* Steps with Icons */}
-                    <div className="relative flex justify-between">
-                        {getCurrentSteps().map((step, index) => {
-                            const StepIcon = step.icon;
-                            const isCompleted = currentStep > index + 1;
-                            const isCurrent = currentStep === index + 1;
+                        {/* Progress fill - always visible */}
+                        <div
+                            className="h-1 bg-black absolute transition-all duration-300 top-5"
+                        /*     style={{
+                                width: currentStep === 1 ? '0%' :
+                                    `${((currentStep - 1) / (getCurrentSteps().length - 1)) * 100}%`
+                            }} */
+                        ></div>
 
-                            return (
-                                <div key={step.name} className="flex flex-col items-center">
-                                    <div className={`
-                                        w-10 h-10 rounded-full flex items-center justify-center
-                                        transition-all duration-300 relative z-10
-                                        ${isCompleted ? 'bg-black text-white' :
-                                            isCurrent ? 'bg-black text-white' :
-                                                'bg-white border-2 border-gray-200 text-gray-400'}
-                                    `}>
-                                        <StepIcon className="w-5 h-5" />
+                        {/* Steps with Icons - Always horizontal with minimum width to prevent squishing */}
+                        <div className="relative flex justify-between" style={{ minWidth: getCurrentSteps().length * 100 + 'px' }}>
+                            {getCurrentSteps().map((step, index) => {
+                                const StepIcon = step.icon;
+                                const isCompleted = currentStep > index + 1;
+                                const isCurrent = currentStep === index + 1;
+
+                                return (
+                                    <div key={step.name} className="flex flex-col items-center px-2">
+                                        <div className={`
+                                w-10 h-10 rounded-full flex items-center justify-center
+                                transition-all duration-300 relative z-10
+                                ${isCompleted ? 'bg-black text-white' :
+                                                isCurrent ? 'bg-black text-white' :
+                                                    'bg-white border-2 border-gray-200 text-gray-400'}
+                            `}>
+                                            <StepIcon className="w-5 h-5" />
+                                        </div>
+                                        <span className={`
+                                mt-2 text-sm font-medium whitespace-nowrap
+                                ${isCompleted || isCurrent ? 'text-black' : 'text-gray-400'}
+                            `}>
+                                            {step.name}
+                                        </span>
                                     </div>
-                                    <span className={`
-                                        mt-2 text-sm font-medium
-                                        ${isCompleted || isCurrent ? 'text-black' : 'text-gray-400'}
-                                    `}>
-                                        {step.name}
-                                    </span>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </div>

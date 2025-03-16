@@ -330,7 +330,7 @@ const OrderSummary = ({
 
                     <div className="pt-4 border-t grid grid-cols-2 gap-4">
                         <span className="text-gray-600">Total Cost:</span>
-                        <span className="text-lg lg:text-xl font-bold">${calculatePricing().toLocaleString()}</span>
+                        <span className="text-lg lg:text-xl font-bold">{adbridgeData.currency} {calculatePricing().toLocaleString()}</span>
                     </div>
                 </div>
             </CardContent>
