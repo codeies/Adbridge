@@ -132,7 +132,7 @@ const RDArconStep = () => {
                                 <div className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded-lg">
                                     <RadioGroupItem value="notRequired" id="notRequired" />
                                     <Label htmlFor="notRequired" className="text-sm font-medium cursor-pointer">
-                                        My jingle does not require ARCON
+                                        My campaign does not require ARCON
                                     </Label>
                                 </div>
                             </RadioGroup>

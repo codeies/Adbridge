@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, ArrowLeft, ShoppingCart } from "lucide-react";
+import { Loader2, ArrowLeft, ShoppingCart, Plus } from "lucide-react";
 import axios from "axios";
 import StepHeader from "./StepHeader";
 import useCampaignStore from "@/stores/useCampaignStore";
@@ -21,6 +21,7 @@ const PaymentStep = () => {
         arcon,
         totalOrderCost,
         setCurrentStep,
+        resetCampaign,
     } = useCampaignStore();
 
     // Check for existing abandoned cart on component mount
@@ -41,10 +42,9 @@ const PaymentStep = () => {
         //checkExistingCart();
     }, []);
 
-    const createOrder = async () => {
+    const createOrder = async (shouldCheckout = true) => {
         setProcessing(true);
         setError(null);
-
         try {
             // Create FormData object to handle file uploads
             const formData = new FormData();
@@ -55,13 +55,14 @@ const PaymentStep = () => {
                 total_cost: totalOrderCost,
                 campaign_details: campaignType === "billboard" ? {
                     billboard_id: billboard.selectedBillboard.id,
+                    featured_image: billboard.selectedBillboard.featured_image,
                     billboard_name: billboard.selectedBillboard.name,
                     duration_type: billboard.selectedDuration,
                     num_days: billboard.numDays || 0,
                     num_weeks: billboard.numWeeks || 0,
                     num_months: billboard.numMonths || 0,
                     location: billboard.selectedBillboard.location,
-                    attributes: billboard.selectedBillboard.attributes,
+                    attributes: billboard.selectedBillboard?.attributes || [],//billboard.selectedBillboard.attributes,
                     start_date: billboard.startDate,
                     end_date: billboard.endDate,
                     media_type: billboard.mediaType,
@@ -69,7 +70,8 @@ const PaymentStep = () => {
                 } : {
                     station_id: radio.selectedStation.id,
                     station_name: radio.selectedStation.title,
-                    attributes: radio.selectedBillboard.attributes,
+                    featured_image: radio.selectedStation.featured_image,
+                    attributes: radio.selectedStation?.attributes || [],//radio.selectedBillboard.attributes,
                     duration: radio.selectedDuration,
                     time_slot: radio.selectedTimeSlot,
                     session: radio.selectedSession,
@@ -98,7 +100,6 @@ const PaymentStep = () => {
                 formData.append('media_file', radio.mediaFile);
             }
 
-
             // Add ARCON permit file if exists
             if (arcon.permitFile) {
                 formData.append('arcon_permit', arcon.permitFile);
@@ -106,20 +107,32 @@ const PaymentStep = () => {
 
             formData.append('action', 'create_campaign_order'); // Add action for WordPress AJAX
             formData.append('nonce', adbridgeData.nonce);
-            // Save campaign data and get WooCommerce checkout URL
+            formData.append('continue_shopping', !shouldCheckout); // Add flag for continue shopping
+
+            // Save campaign data and get WooCommerce checkout URL or cart URL
             const response = await axios.post(adbridgeData.ajaxUrl, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data'
                 },
             });
-            if (response.data.success && response.data.checkout_url) {
-
-                // Redirect to WooCommerce checkout
-                window.location.href = response.data.checkout_url;
+            //console.log(response.data);
+            if (response.data.success) {
+                if (shouldCheckout && response.data.checkout_url) {
+                    // Redirect to WooCommerce checkout
+                    window.location.href = response.data.checkout_url;
+                } else if (!shouldCheckout && response.data.checkout_url) {
+                    // Reset campaign state for a new campaign
+                    resetCampaign();
+                    // Redirect to cart page or campaign selection
+                    //window.location.href = response.data.cart_url;
+                } else {
+                    throw new Error("Invalid response from server");
+                }
             } else {
                 throw new Error("Failed to create order");
             }
         } catch (error) {
+            console.log(error);
             setError(error.response?.data?.message || "Failed to process order.");
             setProcessing(false);
         }
@@ -177,12 +190,13 @@ const PaymentStep = () => {
                                     <span className="font-medium">Location:</span>
                                     <span>{billboard.selectedBillboard?.location}</span>
 
-                                    {billboard.selectedBillboard?.attributes.map((attr, index) => (
+                                    {billboard.selectedBillboard?.attributes?.map((attr, index) => (
                                         <React.Fragment key={`attr-${index}`}>
                                             <span className="font-medium">{attr.attribute}:</span>
                                             <span>{attr.value}</span>
                                         </React.Fragment>
-                                    ))}
+                                    )) || <span>No attributes available</span>}
+
 
 
                                     <span className="font-medium">Duration Type:</span>
@@ -222,7 +236,7 @@ const PaymentStep = () => {
                                     <span className="font-medium">No of Spots:</span>
                                     <span>{radio.selectedSpots}</span>
 
-                                    {radio.selectedStation?.attributes.map((attr, index) => (
+                                    {radio.selectedStation?.attributes?.map((attr, index) => (
                                         <React.Fragment key={`attr-${index}`}>
                                             <span className="font-medium">{attr.attribute}:</span>
                                             <span>{attr.value}</span>
@@ -296,9 +310,10 @@ const PaymentStep = () => {
                         </div>
                     </div>
 
-                    <div className="flex gap-4">
+                    <div className="flex flex-col gap-4 md:flex-row">
                         <Button
                             variant="outline"
+                            className="bg-black text-white hover:bg-gray-800 hover:text-white"
                             onClick={() => setCurrentStep(currentStep - 1)}
                             disabled={processing}
                         >
@@ -306,8 +321,25 @@ const PaymentStep = () => {
                             Back
                         </Button>
                         <Button
-                            className="flex-1"
-                            onClick={createOrder}
+                            className="flex-1 bg-black text-white hover:bg-gray-800 hover:text-white"
+                            onClick={() => createOrder(false)}
+                            disabled={processing}
+                        >
+                            {processing ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Processing...
+                                </>
+                            ) : (
+                                <>
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Add to Cart & Continue Shopping
+                                </>
+                            )}
+                        </Button>
+                        <Button
+                            className="flex-1 bg-red-600 text-white hover:bg-red-700"
+                            onClick={() => createOrder(true)}
                             disabled={processing}
                         >
                             {processing ? (

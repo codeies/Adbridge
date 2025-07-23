@@ -6,6 +6,7 @@ use Carbon_Fields\Container;
 use Carbon_Fields\Field;
 use WP_User;
 use WP_Post;
+use DateTime;
 
 /**
  * Handles scheduling and sending of notification messages
@@ -32,12 +33,15 @@ class MessageScheduler
      */
     public function __construct()
     {
+        // Create logs table on plugin activation
+        $this->createLogsTable();
+
         // Registration hooks
         add_action('user_register', [$this, 'scheduleRegistrationMessages'], 10, 1);
 
 
 
-        add_action('adbridge_new_aboundent_cart', [$this, 'scheduleAboundentMessages'], 10, 1);
+        add_action('adbridge_new_abandoned_cart', [$this, 'scheduleAboundentMessages'], 10, 1);
 
         // Campaign hooks
         add_action('woocommerce_order_status_completed', [$this, 'scheduleBookingConfirmationMessages']);
@@ -55,6 +59,38 @@ class MessageScheduler
 
         // Message sending handlers
         add_action('send_scheduled_message', [$this, 'sendMessage'], 10, 3);
+
+        add_action('admin_menu', [$this, 'displayLogsPage']);
+    }
+
+    /**
+     * Create custom table for message logs if it doesn't exist
+     */
+    private function createLogsTable(): void
+    {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'adrentals_message_logs';
+        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            user_id bigint(20) NOT NULL,
+            type varchar(50) NOT NULL,
+            template_id bigint(20) NOT NULL,
+            trigger_type varchar(50) NOT NULL,
+            sent_at datetime NOT NULL,
+            PRIMARY KEY (id)
+        ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci;";
+
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+
+        // Check if columns exist before adding them
+        $columns = $wpdb->get_col("SHOW COLUMNS FROM $table_name");
+        if (!in_array('recipient', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN recipient varchar(255) DEFAULT NULL");
+        }
+        if (!in_array('response', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN response text DEFAULT NULL");
+        }
     }
 
     /**
@@ -86,36 +122,32 @@ class MessageScheduler
             $adbridge_order_id
         ));
 
-        //$order_id = $cart_data->wc_order_id;
-        //$order = wc_get_order($order_id);
+        if (!$cart_data) {
+            error_log("Abandoned cart data not found for ID: {$adbridge_order_id}");
+            return;
+        }
 
         $user_id = $cart_data->user_id; // Get the user ID associated with the order
 
-
         // Get notification configurations
-        $sms_notifications = $this->filterNotificationsByTrigger(
-            carbon_get_theme_option('abandoned_cart_sms'),
-            'abandoned_cart'
-        );
+        $sms_notifications = carbon_get_theme_option('abandoned_cart_sms');
+        $email_notifications = carbon_get_theme_option('abandoned_cart_email');
 
-        $email_notifications = $this->filterNotificationsByTrigger(
-            carbon_get_theme_option('abandoned_cart_email'),
-            'abandoned_cart'
-        );
+        error_log("Abandoned cart notifications - SMS: " . print_r($sms_notifications, true));
+        error_log("Abandoned cart notifications - Email: " . print_r($email_notifications, true));
 
         $meta_data = [
             'cart_id' => $adbridge_order_id,
-            //'cart_contents' => isset($cart_data->cart_contents) ? $cart_data->cart_contents : '',
             'abandoned_at' => isset($cart_data->created_at) ? $cart_data->created_at : current_time('mysql'),
         ];
 
         // Schedule SMS messages
-        if ($this->isSmsEnabled()) {
+        if ($this->isSmsEnabled() && !empty($sms_notifications)) {
             $this->scheduleMessages($user_id, self::TYPE_SMS, $sms_notifications, self::TRIGGER_ABANDONED_CART, $meta_data);
         }
 
         // Schedule Email messages
-        if ($this->isEmailEnabled()) {
+        if ($this->isEmailEnabled() && !empty($email_notifications)) {
             $this->scheduleMessages($user_id, self::TYPE_EMAIL, $email_notifications, self::TRIGGER_ABANDONED_CART, $meta_data);
         }
     }
@@ -270,10 +302,15 @@ class MessageScheduler
      */
     private function scheduleMessages(int $user_id, string $type, array $notifications, string $trigger, array $meta_data = []): void
     {
+        error_log("Attempting to schedule messages for user {$user_id}, type {$type}, trigger {$trigger}");
+        error_log("Notifications configuration: " . print_r($notifications, true));
+        
         foreach ($notifications as $notification) {
             $delay = isset($notification['delay_hours']) ? (int) $notification['delay_hours'] : 0;
             $template_id = isset($notification['template']) ? (int) $notification['template'] : 0;
             $condition = $notification['condition'] ?? 'all'; // Get the condition
+
+            error_log("Processing notification - Delay: {$delay}, Template ID: {$template_id}, Condition: {$condition}");
 
             if ($template_id > 0) {
                 $this->scheduleSingleMessage(
@@ -284,6 +321,8 @@ class MessageScheduler
                     $trigger,
                     array_merge($meta_data, ['condition' => $condition]) // Add to metadata
                 );
+            } else {
+                error_log("Skipping notification - Invalid template ID: {$template_id}");
             }
         }
     }
@@ -303,14 +342,23 @@ class MessageScheduler
     /**
      * Schedule a single message
      */
-    private function scheduleSingleMessage(int $user_id, string $type, int $template_id, int $delay_hours, string $trigger, array $meta_data = []): void
+    private function scheduleSingleMessage(int $user_id, string $type, int $template_id, int $delay_minutes, string $trigger, array $meta_data = []): void
     {
-
-        $timestamp = time() + ($delay_hours * HOUR_IN_SECONDS);
-
+        // Get WordPress timezone
+        $wp_timezone = wp_timezone();
+        
+        // Get current time in WordPress timezone
+        $datetime = new DateTime('now', $wp_timezone);
+        
+        // Add delay minutes
+        $datetime->modify("+{$delay_minutes} minutes");
+        
+        // Convert to timestamp (in UTC, as expected by wp_schedule_single_event)
+        $timestamp = $datetime->getTimestamp();
+    
         // Generate unique hook ID
         $hook_id = md5($user_id . $type . $template_id . $trigger . serialize($meta_data) . time());
-
+    
         // Store metadata for retrieval during sending
         update_user_meta($user_id, "scheduled_message_{$hook_id}", [
             'type' => $type,
@@ -319,8 +367,9 @@ class MessageScheduler
             'meta_data' => $meta_data,
             'scheduled_at' => time(),
             'scheduled_for' => $timestamp,
+            'timezone' => $wp_timezone->getName(), // Store timezone for reference
         ]);
-
+    
         wp_schedule_single_event(
             $timestamp,
             'send_scheduled_message',
@@ -374,7 +423,7 @@ class MessageScheduler
         delete_user_meta($user_id, "scheduled_message_{$hook_id}");
 
         // Log the sent message
-        $this->logMessageSent($user_id, $message_data['type'], $template_id, $message_data['trigger']);
+        $this->logMessageSent($user_id, $message_data['type'], $template_id, $message_data['trigger'], $message_data['meta_data']['recipient'] ?? '', $message_data['meta_data']['response'] ?? '');
     }
 
     /**
@@ -474,45 +523,152 @@ class MessageScheduler
 
 
 
-
-
-    /**
-     * Send SMS message
-     */
-    private function sendSms(WP_User $user, string $message): bool
+    private function getRouteeAccessToken(): ?string
     {
-        $api_key = carbon_get_theme_option('adrental_sms_api_key');
-        $api_secret = carbon_get_theme_option('adrental_sms_api_secret');
-        $phone = get_user_meta($user->ID, 'phone', true);
+        // Check if a valid token is cached
+        $cached_token = get_option('adrentals_routee_access_token');
+        $token_expires = get_option('adrentals_routee_token_expires', 0);
 
-        if (empty($phone) || empty($api_key) || empty($api_secret)) {
-            return false;
+        if ($cached_token && $token_expires > time() + 60) { // Add 60s buffer
+            return $cached_token;
         }
 
-        // Implement Routee API SMS sending
-        $response = wp_remote_post('https://connect.routee.net/sms', [
+        // Retrieve application credentials
+        $app_id = carbon_get_theme_option('adrental_sms_api_key');
+        $app_secret = carbon_get_theme_option('adrental_sms_api_secret');
+
+        if (empty($app_id) || empty($app_secret)) {
+            $this->logError('Missing Routee application credentials');
+            return null;
+        }
+
+        // Encode credentials in Base64
+        $credentials = base64_encode("{$app_id}:{$app_secret}");
+
+        // Request access token
+        $response = wp_remote_post('https://auth.routee.net/oauth/token', [
             'headers' => [
-                'Authorization' => 'Basic ' . base64_encode("{$api_key}:{$api_secret}"),
-                'Content-Type' => 'application/json'
+                'Authorization' => "Basic {$credentials}",
+                'Content-Type' => 'application/x-www-form-urlencoded',
             ],
-            'body' => json_encode([
-                'to' => $phone,
-                'body' => $message,
-                'from' => apply_filters('adrentals_sms_sender_id', 'AdRentals')
-            ])
+            'body' => [
+                'grant_type' => 'client_credentials',
+            ],
+            'timeout' => 15,
         ]);
 
         if (is_wp_error($response)) {
-            $this->logError('SMS sending failed: ' . $response->get_error_message(), [
-                'user_id' => $user->ID,
-                'phone' => $phone
+            $this->logError('Failed to retrieve Routee access token', ['error' => $response->get_error_message()]);
+            return null;
+        }
+
+        $response_code = wp_remote_retrieve_response_code($response);
+        $response_body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($response_code !== 200 || empty($response_body['access_token'])) {
+            $this->logError('Invalid Routee token response', [
+                'code' => $response_code,
+                'response' => $response_body,
             ]);
+            return null;
+        }
+
+        // Cache token and expiration
+        $access_token = $response_body['access_token'];
+        $expires_in = $response_body['expires_in'] ?? 3600; // Default to 1 hour
+        update_option('adrentals_routee_access_token', $access_token);
+        update_option('adrentals_routee_token_expires', time() + $expires_in);
+
+        return $access_token;
+    }
+
+    private function formatPhoneNumber(string $phone): ?string
+    {
+        if (empty($phone)) {
+            return null;
+        }
+
+        // Remove spaces, dashes, and other characters
+        $phone = preg_replace('/[^0-9+]/', '', $phone);
+
+        // Ensure the number starts with a '+' followed by country code
+        if (!preg_match('/^\+\d{10,15}$/', $phone)) {
+            // Add country code if missing (e.g., assume US +1 for this example)
+            if (preg_match('/^\d{10}$/', $phone)) {
+                $phone = '+1' . $phone; // Adjust country code based on your needs
+            } else {
+                error_log("Invalid phone number format: {$phone}");
+                return null;
+            }
+        }
+
+        return $phone;
+    }
+    /**
+     * Send SMS message
+     */
+    public function sendSms(WP_User $user, string $message): bool
+    {
+        // Get access token
+        $api_token = $this->getRouteeAccessToken();
+        if (!$api_token) {
+            error_log("SMS sending failed: Unable to obtain Routee access token. User ID: {$user->ID}");
+            $this->logMessageSent($user->ID, self::TYPE_SMS, 0, 'sms_failure', '', 'Failed to obtain access token');
+            return false;
+        }
+
+        // Get and format phone number
+        $phone = get_user_meta($user->ID, 'billing_phone', true);
+        $phone = $this->formatPhoneNumber($phone);
+
+        if (empty($phone)) {
+            error_log("SMS sending failed: Invalid or missing phone number. User ID: {$user->ID}, Phone: " . ($phone ?: 'N/A'));
+            $this->logMessageSent($user->ID, self::TYPE_SMS, 0, 'sms_failure', '', 'Invalid or missing phone number');
+            return false;
+        }
+
+        // Get sender ID from settings
+        $sender_id = carbon_get_theme_option('adrental_sms_sender_id');
+        if (empty($sender_id)) {
+            $sender_id = get_bloginfo('name'); // Fallback to site name if sender ID is not set
+        }
+
+        // Send SMS via Routee API
+        $response = wp_remote_post('https://connect.routee.net/sms', [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_token,
+                'Content-Type' => 'application/json',
+                'Expect' => '',
+            ],
+            'body' => json_encode([
+                'body' => $message,
+                'to' => $phone,
+                'from' => $sender_id,
+            ]),
+            'timeout' => 15,
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log("SMS sending failed: " . $response->get_error_message() . ". User ID: {$user->ID}, Phone: {$phone}");
+            $this->logMessageSent($user->ID, self::TYPE_SMS, 0, 'sms_failure', $phone, $response->get_error_message());
             return false;
         }
 
         $response_code = wp_remote_retrieve_response_code($response);
-        return $response_code >= 200 && $response_code < 300;
+        $response_body = wp_remote_retrieve_body($response);
+
+        if ($response_code < 200 || $response_code >= 300) {
+            error_log("SMS sending failed: HTTP Code {$response_code}, Response: {$response_body}. User ID: {$user->ID}, Phone: {$phone}");
+            $this->logMessageSent($user->ID, self::TYPE_SMS, 0, 'sms_failure', $phone, "HTTP Code {$response_code}, Response: {$response_body}");
+            return false;
+        }
+
+        error_log("SMS sent successfully to {$phone}. User ID: {$user->ID}");
+        $this->logMessageSent($user->ID, self::TYPE_SMS, 0, 'sms_success', $phone, $response_body);
+        return true;
     }
+
+
 
     /**
      * Send email message
@@ -624,21 +780,23 @@ class MessageScheduler
     /**
      * Log message sent for reporting
      */
-    private function logMessageSent(int $user_id, string $type, int $template_id, string $trigger): void
+    private function logMessageSent(int $user_id, string $type, int $template_id, string $trigger, string $recipient = '', string $response = ''): void
     {
-        // Implement message logging for reporting
-        $log = [
-            'user_id' => $user_id,
-            'type' => $type,
-            'template_id' => $template_id,
-            'trigger' => $trigger,
-            'sent_at' => current_time('mysql'),
-        ];
-
-        // Store in custom table or use WP options for simplicity
-        $logs = get_option('adrentals_message_logs', []);
-        $logs[] = $log;
-        update_option('adrentals_message_logs', $logs);
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'adrentals_message_logs';
+        $wpdb->insert(
+            $table_name,
+            [
+                'user_id' => $user_id,
+                'type' => $type,
+                'template_id' => $template_id,
+                'trigger_type' => $trigger,
+                'sent_at' => current_time('mysql'),
+                'recipient' => $recipient,
+                'response' => $response,
+            ],
+            ['%d', '%s', '%d', '%s', '%s', '%s', '%s']
+        );
     }
 
     /**
@@ -666,7 +824,91 @@ class MessageScheduler
     {
         return (bool) carbon_get_theme_option('adrental_enable_email');
     }
+
+    /**
+     * Display logs page in admin area
+     */
+    public function displayLogsPage(): void
+    {
+        add_submenu_page(
+            'edit.php?post_type=campaign',
+            'Message Logs',
+            'Message Logs',
+            'manage_options',
+            'adrentals-message-logs',
+            [$this, 'renderLogsPage']
+        );
+    }
+
+    /**
+     * Render logs page content
+     */
+    public function renderLogsPage(): void
+    {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'adrentals_message_logs';
+        $logs = $wpdb->get_results("SELECT * FROM $table_name ORDER BY sent_at DESC", ARRAY_A);
+        ?>
+        <div class="wrap">
+            <h1>Message Logs</h1>
+            <table class="wp-list-table widefat fixed striped">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>User ID</th>
+                        <th>Type</th>
+                        <th>Template ID</th>
+                        <th>Trigger</th>
+                        <th>Sent At</th>
+                        <th>Recipient</th>
+                        <th>Response</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($logs as $log): ?>
+                        <tr>
+                            <td><?php echo esc_html($log['id']); ?></td>
+                            <td><?php echo esc_html($log['user_id']); ?></td>
+                            <td><?php echo esc_html($log['type']); ?></td>
+                            <td><?php echo esc_html($log['template_id']); ?></td>
+                            <td><?php echo esc_html($log['trigger_type']); ?></td>
+                            <td><?php echo esc_html($log['sent_at']); ?></td>
+                            <td><?php echo esc_html($log['recipient']); ?></td>
+                            <td><?php echo esc_html($log['response']); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php
+    }
 }
 
 // Initialize the class
-new MessageScheduler();
+$scheduler = new MessageScheduler();
+
+// Create an instance of the MessageScheduler class
+/* add_action('init', function () use ($scheduler) {
+    $user_id = 1; // Example user ID
+    $user = get_userdata($user_id);
+
+    if (!$user instanceof WP_User) {
+        error_log("Debug: Invalid user ID {$user_id}");
+        echo "Invalid user ID {$user_id}";
+        return;
+    }
+
+    // Define a test message
+    $test_message = "This is a test SMS message for debugging purposes.";
+
+    // Call the sendSms method directly
+    $result = $scheduler->sendSms($user, $test_message);
+
+    // Output the result for debugging
+    if ($result) {
+        echo "SMS sent successfully to user ID {$user_id}";
+    } else {
+        echo "Failed to send SMS to user ID {$user_id}. Check error logs for details.";
+    }
+});
+ */

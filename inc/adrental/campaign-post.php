@@ -105,6 +105,21 @@ class AdbridgeCampaignPost
      */
     public function add_custom_meta_fields()
     {
+        $default_attributes = [
+            [
+                'name' => 'Billboard Type',
+                'attribute_value' => ''
+            ],
+            [
+                'name' => 'Size',
+                'attribute_value' => ''
+            ],
+            [
+                'name' => 'Description',
+                'attribute_value' => ''
+            ]
+        ];
+
         Container::make('post_meta', 'AdBridge Options')
             ->where('post_type', '=', 'campaign')
             ->add_fields(array(
@@ -114,15 +129,46 @@ class AdbridgeCampaignPost
                         'radio' => __('Radio'),
                         'tv' => __('TV'),
                     )),
-                Field::make('complex', 'attributes', 'Attributes')
-
+                Field::make('complex', 'attributes_billboard', 'Attributes')
                     ->set_datastore(new Adrental_Serialized_Post_Meta_Datastore())
                     ->set_layout('tabbed-vertical')
-                    ->add_fields(array(
-                        Field::make('text', 'name', 'Name'),
-                        Field::make('text', 'attribute_value', 'Value'),
+                    ->set_min(1) // Minimum number of entries
+                    ->set_max(5) // Maximum number of entries
+                    ->add_fields([
+                        Field::make('text', 'name', 'Name')
+                            ->set_attribute('placeholder', 'Enter attribute name'),
+                        Field::make('text', 'attribute_value', 'Value')
+                            ->set_attribute('placeholder', 'Enter attribute value')
+                    ])
+                    ->set_header_template('<%- name %> - <%- attribute_value %>')
+                    ->set_conditional_logic(array(
+                        array(
+                            'field' => 'adrentals_type',
+                            'value' => array('billboard'),
+                            'compare' => 'IN',
+                        ),
                     ))
-                    ->set_header_template('<%- name %> - <%- attribute_value %>'),
+                    ->set_default_value($default_attributes),
+                Field::make('complex', 'attributes', 'Attributes')
+                    ->set_datastore(new Adrental_Serialized_Post_Meta_Datastore())
+                    ->set_layout('tabbed-vertical')
+                    ->set_min(1) // Minimum number of entries
+                    ->set_max(5) // Maximum number of entries
+                    ->add_fields([
+                        Field::make('text', 'name', 'Name')
+                            ->set_attribute('placeholder', 'Enter attribute name'),
+                        Field::make('text', 'attribute_value', 'Value')
+                            ->set_attribute('placeholder', 'Enter attribute value')
+                    ])
+                    ->set_header_template('<%- name %> - <%- attribute_value %>')
+                    ->set_conditional_logic(array(
+                        array(
+                            'field' => 'adrentals_type',
+                            'value' => array('tv', 'radio'),
+                            'compare' => 'IN',
+                        ),
+                    )),
+                //    ->set_default_value($default_attributes),
 
                 Field::make('complex', 'jingle_slots', 'Jingle Slots')
                     ->set_conditional_logic(array(

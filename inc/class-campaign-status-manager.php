@@ -20,7 +20,7 @@ class Campaign_Status_Manager
     public static function activate()
     {
         if (!wp_next_scheduled('campaign_status_update_cron')) {
-            wp_schedule_event(time(), 'hourly', 'campaign_status_update_cron');
+            wp_schedule_event(time(), 'every_minute', 'campaign_status_update_cron');
         }
     }
 
@@ -34,8 +34,12 @@ class Campaign_Status_Manager
     public function update_campaign_statuses()
     {
         global $wpdb;
-        $current_date = current_time('Y-m-d');
-
+        
+        // Get WordPress timezone and current date
+        $timezone = wp_timezone();
+        $current_datetime = new \DateTime('now', $timezone);
+        $current_date = $current_datetime->format('Y-m-d');
+    
         // 1. Mark finished campaigns (end_date passed)
         $finished_campaigns = $wpdb->get_results($wpdb->prepare(
             "SELECT id FROM {$this->table_name}
@@ -44,7 +48,7 @@ class Campaign_Status_Manager
              AND campaign_status != 'finished'",
             $current_date
         ));
-
+    
         if (!empty($finished_campaigns)) {
             $wpdb->query($wpdb->prepare(
                 "UPDATE {$this->table_name}
@@ -54,12 +58,12 @@ class Campaign_Status_Manager
                  AND campaign_status != 'finished'",
                 $current_date
             ));
-
+    
             foreach ($finished_campaigns as $campaign) {
                 do_action('adbridge_campaign_ended', $campaign->id);
             }
         }
-
+    
         // 2. Activate campaigns (start_date passed and status completed)
         $active_campaigns = $wpdb->get_results($wpdb->prepare(
             "SELECT id FROM {$this->table_name}
@@ -68,7 +72,7 @@ class Campaign_Status_Manager
              AND campaign_status NOT IN ('finished', 'active')",
             $current_date
         ));
-
+    
         if (!empty($active_campaigns)) {
             $wpdb->query($wpdb->prepare(
                 "UPDATE {$this->table_name}
@@ -78,13 +82,39 @@ class Campaign_Status_Manager
                  AND campaign_status NOT IN ('finished', 'active')",
                 $current_date
             ));
-
+    
             foreach ($active_campaigns as $campaign) {
                 do_action('adbridge_campaign_started', $campaign->id);
             }
         }
-
-        // 3. Expire abandoned campaigns (status abandoned with dates passed)
+    
+        // 3. Set campaigns to expired if ending date has passed
+        $expired_campaigns = $wpdb->get_results($wpdb->prepare(
+            "SELECT id FROM {$this->table_name}
+             WHERE end_date < %s
+             AND campaign_status NOT IN ('finished', 'expired')
+             AND status != 'abandoned'",
+            $current_date
+        ));
+    
+        if (!empty($expired_campaigns)) {
+         // 3. Expire abandoned campaigns (status abandoned with dates passed)
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$this->table_name}
+                SET campaign_status = 'expired'
+                WHERE status = 'abandoned'
+                AND (start_date <= %s OR end_date <= %s)
+                AND campaign_status NOT IN ('finished', 'expired')",
+                $current_date,
+                $current_date
+            ));
+    
+            foreach ($expired_campaigns as $campaign) {
+                do_action('adbridge_campaign_expired', $campaign->id);
+            }
+        }
+    
+        // 4. Handle abandoned campaigns separately (optional - if you still want this logic)
         $wpdb->query($wpdb->prepare(
             "UPDATE {$this->table_name}
              SET campaign_status = 'expired'

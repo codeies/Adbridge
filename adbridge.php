@@ -24,6 +24,10 @@ if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get
     return; // Stop execution of the plugin
 }
 
+include_once(plugin_dir_path(__FILE__) . "/inc/adbridge_campaign_orders_admin.php");
+include_once(plugin_dir_path(__FILE__) . "/inc/woocommerce.php");
+include_once(plugin_dir_path(__FILE__) . "/inc/adrental/shortcodes.php");
+
 class AdBridge
 {
     function __construct()
@@ -48,7 +52,7 @@ class AdBridge
     public function adbridge_booking_shortcode()
     {
         if (!is_user_logged_in()) {
-            $login_url = wc_get_page_permalink('myaccount'); // WooCommerce My Account login page
+            $login_url = home_url('/register'); // Direct users to /register instead of WooCommerce My Account page
             return '<p>You must be <a href="' . esc_url($login_url) . '">logged in</a> to access this page.</p>';
         }
 
@@ -86,11 +90,12 @@ class AdBridge
 
     function loadAssets()
     {
-        $debug = true;
+        $debug = false;
+
 
         if (!$debug) {
-            wp_enqueue_style('adrentals-style', plugin_dir_url(__FILE__) . '/dist/assets/index-6e5337b5.css', [], '1.0', 'all');
-            wp_enqueue_script('adbridge-react-core', plugin_dir_url(__FILE__) . '/dist/assets/index-200ee780.js', [], '1.0', true);
+            wp_enqueue_style('adrentals-style', plugin_dir_url(__FILE__) . '/dist/assets/index-a71e4762.css', [], '1.0', 'all');
+            wp_enqueue_script('adbridge-react-core', plugin_dir_url(__FILE__) . '/dist/assets/index-d56fcb6f.js', [], '1.0', true);
         } else {
             wp_register_script('adbridge-react-core', 'http://localhost:5173/src/main.jsx', ['adbridge-react-script'], time(), true);
         }
@@ -109,7 +114,8 @@ class AdBridge
             'nonce'     => wp_create_nonce('adbridge_campaign_nonce'),
             'currency'  => get_woocommerce_currency_symbol(), // Get the current WooCommerce currency symbol
             'website_title'  => get_bloginfo('name'), // Get the current WooCommerce currency symbol
-            'jingle_creation_cost'  => 50, // Get the current WooCommerce currency symbol
+            'jingle_creation_cost'  => get_option('_adbridge_jingle_fee', 100), // Get the current WooCommerce currency symbol
+            //'arcon_terms'  => $acron_value_json, // Get the current WooCommerce currency symbol
         ]);
 
 
@@ -125,8 +131,6 @@ require_once(plugin_dir_path(__FILE__) . "inc/adrental/settings.php");
 
 require_once plugin_dir_path(__FILE__) . 'inc/class-campaign-status-manager.php';
 include_once(plugin_dir_path(__FILE__) . "/inc/message_scheduler.php");
-include_once(plugin_dir_path(__FILE__) . "/inc/adbridge_campaign_orders_admin.php");
-include_once(plugin_dir_path(__FILE__) . "/inc/woocommerce.php");
 
 function adbridge_campaign_order_install()
 {

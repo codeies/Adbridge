@@ -17,25 +17,49 @@ class AdBridge_Plugin_Options
 
         Container::make('theme_options', __('Settings'))
             ->set_page_parent('edit.php?post_type=campaign')
-            ->add_tab(__('WooCommerce Product'), [
+            ->add_tab(__('General Product'), [
                 Field::make('select', 'adbridge_wc_product', 'Select WooCommerce Product')
                     ->set_options($this->getWoocommerceProductsOptions()),
+                Field::make('complex', 'adbridge_arcon_terms', 'Default Global Arcon Terms')
+                    //->set_datastore(new Adrental_Serialized_Post_Meta_Datastore())
+
+                    ->set_layout('tabbed-vertical')
+                    ->add_fields(array(
+                        Field::make('text', 'title', 'Title'),
+                        Field::make('text', 'cost', 'Cost'),
+                    ))
+                    ->set_header_template('<%- title %> - <%- cost %>'),
+                Field::make('text', 'adbridge_jingle_fee', 'Jingle Creation Fee')
+                    ->set_attribute('type', 'number')
+                    ->set_help_text('Enter the additional fee for jingle creation.'),
+
             ])
             ->add_tab(__('SMS Settings'), [
                 Field::make('text', 'adrental_sms_api_key', 'Routee API Key'),
                 Field::make('text', 'adrental_sms_api_secret', 'Routee API Secret'),
+                Field::make('text', 'adrental_sms_sender_id', 'SMS Sender ID')
             ])
             ->add_tab(__('Email Settings'), [
                 Field::make('text', 'adrental_email_from_name', 'From Name')
                     ->set_default_value(get_bloginfo('name')),
                 Field::make('text', 'adrental_email_from_address', 'From Email')
                     ->set_default_value(get_option('admin_email')),
-                Field::make('rich_text', 'adrental_email_header', 'Email Header')
+                /*     Field::make('rich_text', 'adrental_email_header', 'Email Header')
                     ->set_help_text('Content to appear at the top of all emails'),
                 Field::make('rich_text', 'adrental_email_footer', 'Email Footer')
-                    ->set_help_text('Content to appear at the bottom of all emails'),
+                    ->set_help_text('Content to appear at the bottom of all emails'), */
             ])
-            ->add_tab(__('Notification System'), $this->getNotificationFields($templateOptions));
+            ->add_tab(__('Wallet Settings'), [
+                Field::make('text', 'adbridge_signup_bonus', 'Signup Bonus Amount')
+                    ->set_attribute('type', 'number')
+                    ->set_default_value(10000)
+                    ->set_help_text('Amount to credit to new users\' wallets upon registration')
+            ])
+            ->add_tab(__('Notification System'), $this->getNotificationFields($templateOptions))
+            ->add_tab(__('Notification Message'), [
+                Field::make('rich_text', 'adrental_notification_message', 'Notification Message')
+                    ->set_help_text('This message will be displayed to logged-in users via shortcode [adrental_notification]'),
+            ]);
     }
 
     private function getNotificationFields($templateOptions)
@@ -98,7 +122,7 @@ class AdBridge_Plugin_Options
     private function getFollowUpFields($templateOptions)
     {
         return [
-            Field::make('text', 'delay_hours', __('Delay Hours'))
+            Field::make('text', 'delay_hours', __('Delay Minutes'))
                 ->set_attribute('type', 'number')
                 ->set_default_value(24),
             Field::make('select', 'template', __('Template'))
@@ -122,7 +146,7 @@ class AdBridge_Plugin_Options
                     'campaign_start' => 'Campaign Start',
                     'post_campaign' => 'After Campaign End',
                 ]),
-            Field::make('text', 'delay_hours', __('Delay Hours'))
+            Field::make('text', 'delay_hours', __('Delay Minutes'))
                 ->set_attribute('type', 'number'),
             Field::make('select', 'template', __('Template'))
                 ->add_options($templateOptions),
@@ -132,7 +156,7 @@ class AdBridge_Plugin_Options
     private function getReminderFields($templateOptions)
     {
         return [
-            Field::make('text', 'delay_hours', __('Delay Hours'))
+            Field::make('text', 'delay_hours', __('Delay Minutes'))
                 ->set_attribute('type', 'number'),
             Field::make('select', 'template', __('Template'))
                 ->add_options($templateOptions),

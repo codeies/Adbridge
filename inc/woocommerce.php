@@ -40,10 +40,97 @@ class AdBridge_Campaign_Order
         add_action('woocommerce_checkout_create_order_line_item', [$this, 'add_campaign_id_to_order_item'], 10, 4);
 
         // Hook to update campaign with order ID after order is created
-        add_action('woocommerce_new_order', [$this, 'update_campaign_with_order_id'], 10);
+        add_action('woocommerce_checkout_order_processed', [$this, 'update_campaign_with_order_id'], 10, 3);
 
+        add_filter('woocommerce_cart_item_thumbnail', [$this, 'customize_cart_item_thumbnail'], 10, 3);
+        add_action('user_register', [$this, 'add_wallet_credit_on_registration'], 10, 1);
 
+        $this->init_thumbnail_hooks();
         //add_action('wp_scheduled_delete', [$this, 'cleanup_old_abandoned_campaigns']);
+    }
+    function add_featured_image_to_order_item($item, $cart_item_key, $values, $order)
+    {
+        if (isset($values['featured_image'])) {
+            $item->add_meta_data('_campaign_featured_image', $values['featured_image']);
+        }
+    }
+    function customize_order_item_thumbnail($thumbnail, $item)
+    {
+        // Get the campaign_id from the order item
+        $campaign_id = $item->get_meta('_campaign_id');
+        $featured_image = $item->get_meta('_campaign_featured_image');
+
+        if ($featured_image) {
+            return '<img src="' . esc_url($featured_image) . '"  width="100%"  alt="Campaign Image" class="adbridge-campaign-thumbnail" />';
+        } else if ($campaign_id) {
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'adbridge_campaign_order';
+
+            // Get campaign data from database
+            $campaign_data = $wpdb->get_var($wpdb->prepare(
+                "SELECT campaign_data FROM {$table_name} WHERE campaign_id = %s LIMIT 1",
+                $campaign_id
+            ));
+
+            if ($campaign_data) {
+                $campaign = json_decode($campaign_data, true);
+
+                // Extract featured image from campaign data
+                if (isset($campaign['campaign_details']['featured_image']) && !empty($campaign['campaign_details']['featured_image'])) {
+                    $featured_image = $campaign['campaign_details']['featured_image'];
+                    return '<img src="' . esc_url($featured_image) . '" alt="Campaign ' . esc_attr($campaign_id) . '" class="adbridge-campaign-thumbnail" />';
+                }
+            }
+        }
+
+        return $thumbnail;
+    }
+
+    // Method for admin order thumbnails
+    function customize_admin_order_item_thumbnail($thumbnail, $item_id)
+    {
+        $item = WC_Order_Factory::get_order_item($item_id);
+        $featured_image = $item->get_meta('_campaign_featured_image');
+
+        if ($featured_image) {
+            return '<img src="' . esc_url($featured_image) . '" alt="Campaign Image" class="adbridge-campaign-thumbnail" style="max-width: 50px;" />';
+        }
+
+        return $thumbnail;
+    }
+
+    // Method for email order thumbnails
+    function customize_email_order_item_thumbnail($thumbnail, $item)
+    {
+        $featured_image = $item->get_meta('_campaign_featured_image');
+
+        if ($featured_image) {
+            return '<img src="' . esc_url($featured_image) . '" alt="Campaign Image" class="adbridge-campaign-thumbnail" style="max-width: 100px;" />';
+        }
+
+        return $thumbnail;
+    }
+
+    public function init_thumbnail_hooks()
+    {
+        // Your existing cart thumbnail hook is already in the constructor
+
+        // Add hooks for order items
+        add_filter('woocommerce_order_item_thumbnail', [$this, 'customize_order_item_thumbnail'], 10, 2);
+        add_action('woocommerce_checkout_create_order_line_item', [$this, 'add_featured_image_to_order_item'], 10, 4);
+
+        // For admin order page
+        add_filter('woocommerce_admin_order_item_thumbnail', [$this, 'customize_admin_order_item_thumbnail'], 10, 2);
+
+        // For order emails
+        add_filter('woocommerce_email_order_item_thumbnail', [$this, 'customize_email_order_item_thumbnail'], 10, 2);
+    }
+
+    public function add_wallet_credit_on_registration($user_id)
+    {
+        $amount = get_option('adbridge_signup_bonus', 10000); // Get the configured amount, default to 10000 if not set
+        $wallet = new Woo_Wallet_Wallet();
+        $wallet->credit($user_id, $amount, 'Sign-up Bonus');
     }
 
     /**
@@ -59,25 +146,30 @@ class AdBridge_Campaign_Order
     /**
      * Update campaign with order ID when an order is processed
      */
-    public function update_campaign_with_order_id($order_id)
+    public function update_campaign_with_order_id($order_id, $posted_data, $order)
     {
-        error_log("update_campaign_with_order_id: ");
+
+
+        //error_log("update_campaign_with_order_id: ");
         global $wpdb;
 
         // Get line items from the order
         $order = wc_get_order($order_id);
 
         foreach ($order->get_items() as $item) {
+
             // Get campaign_id from the order item meta
             $campaign_id = $item->get_meta('_campaign_id');
+
             if ($campaign_id) {
+
                 // Update the campaign record with the order ID
                 $wpdb->update(
                     $this->table_name,
-                    ['wc_order_id' => $order_id,],
+                    ['wc_order_id' => $order_id],
                     ['campaign_id' => $campaign_id],
-                    ['%d', '%s'],
-                    ['%s']
+                    ['%d'], // wc_order_id is an integer
+                    ['%s']  // campaign_id is a string
                 );
 
                 // Also store campaign ID in the main order meta for easier reference
@@ -102,12 +194,27 @@ class AdBridge_Campaign_Order
 
         // Loop through cart items
         foreach ($cart->get_cart() as $cart_item_key => $cart_item) {
+
             // Check if the cart item has the custom campaign data
             if (isset($cart_item['campaign_id']) && isset($cart_item['total_cost'])) {
+                /*     echo '<pre>';
+                print_r($cart_item);
+                die(); */
                 $cart_item['data']->set_price($cart_item['total_cost']);
                 $cart_item['data']->set_name($cart_item['custom_title']);
             }
+            if (isset($cart_item['featured_image']) && !empty($cart_item['featured_image'])) {
+                $cart_item['data']->set_image_id(attachment_url_to_postid($cart_item['featured_image']));
+            }
         }
+    }
+
+    function customize_cart_item_thumbnail($thumbnail, $cart_item, $cart_item_key)
+    {
+        if (isset($cart_item['featured_image']) && !empty($cart_item['featured_image'])) {
+            return '<img src="' . esc_url($cart_item['featured_image']) . '" alt="' . esc_attr($cart_item['data']->get_name()) . '" />';
+        }
+        return $thumbnail;
     }
     public static function get_instance()
     {
@@ -389,6 +496,8 @@ class AdBridge_Campaign_Order
 
         $adbridge_order_id = $wpdb->insert_id; // Get the inserted ID
 
+        do_action('adbridge_new_abandoned_cart', $adbridge_order_id);
+
         // **Add product to cart instead of creating order**
         $product_id = $this->product_id;
         if ($params['campaign_type'] == 'billboard') {
@@ -397,10 +506,13 @@ class AdBridge_Campaign_Order
             $title = ucfirst($params['campaign_type']) . " Ad - " . $params['campaign_details']['station_name'];
         }
 
+        $featured_image = $params['campaign_details']['featured_image'];
+
         $cart_item_data = [
             'campaign_id' => $campaign_id,
             'custom_title' => $title,
             'total_cost' => $params['total_cost'],
+            'featured_image' => $featured_image,
             'unique_key' => md5(microtime() . rand())
         ];
 
@@ -426,17 +538,25 @@ class AdBridge_Campaign_Order
     public function update_campaign_order_status($order_id, $old_status, $new_status, $order)
     {
         global $wpdb;
-        $campaign_id = get_post_meta($order_id, '_campaign_id', true);
-        if (!$campaign_id) return;
+        
+        // Get the order
+        $order = wc_get_order($order_id);
+        if (!$order) return;
 
-        $status = ($new_status === 'completed') ? 'completed' : 'abandoned';
-        $wpdb->update(
-            $this->table_name,
-            ['status' => $status],
-            ['campaign_id' => $campaign_id],
-            ['%s'],
-            ['%s']
-        );
+        // Get campaign_id from order items
+        foreach ($order->get_items() as $item) {
+            $campaign_id = $item->get_meta('_campaign_id');
+            if ($campaign_id) {
+                $status = ($new_status === 'completed') ? 'completed' : 'abandoned';
+                $wpdb->update(
+                    $this->table_name,
+                    ['status' => $status],
+                    ['campaign_id' => $campaign_id],
+                    ['%s'],
+                    ['%s']
+                );
+            }
+        }
     }
 
     public function cleanup_old_abandoned_campaigns()

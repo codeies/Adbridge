@@ -26,23 +26,25 @@ const BBDurationStep = () => {
             />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-                {durations.map(({ key, label }) => (
-                    <Card
-                        key={key}
-                        className="cursor-pointer hover:bg-gray-50"
-                        onClick={() => {
-                            setBillboardFilters({ selectedDuration: key });
-                            setCurrentStep(4); // Move to the next step
-                        }}
-                    >
-                        <CardContent className="p-3 md:p-4">
-                            <h3 className="text-sm md:text-base font-semibold">{label}</h3>
-                            <p className="text-xs md:text-sm text-gray-600">
-                                {adbridgeData.currency} {billboard.selectedBillboard?.pricing[key]} / {label.toLowerCase()}
-                            </p>
-                        </CardContent>
-                    </Card>
-                ))}
+                {durations
+                    .filter(({ key }) => billboard.selectedBillboard?.pricing[key] > 0) // Filter out durations with price 0
+                    .map(({ key, label }) => (
+                        <Card
+                            key={key}
+                            className="cursor-pointer hover:bg-gray-50"
+                            onClick={() => {
+                                setBillboardFilters({ selectedDuration: key });
+                                setCurrentStep(4); // Move to the next step
+                            }}
+                        >
+                            <CardContent className="p-3 md:p-4">
+                                <h3 className="text-sm md:text-base font-semibold">{label}</h3>
+                                <p className="text-xs md:text-sm text-gray-600">
+                                    {adbridgeData.currency} {billboard.selectedBillboard?.pricing[key]} / {label.toLowerCase()}
+                                </p>
+                            </CardContent>
+                        </Card>
+                    ))}
             </div>
         </div>
     );

@@ -140,34 +140,75 @@ const RadioStep = () => {
 
 
             {/* Stations List */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredStations.map((station) => (
                     <Card
                         key={station.id}
-                        className="cursor-pointer hover:bg-gray-50"
+                        className="cursor-pointer 
+                transition-all 
+                duration-300 
+                border-2 
+                border-transparent 
+                hover:border-blue-200"
                         onClick={() => {
                             setRadioFilters({ selectedStation: station });
                             setCurrentStep(3);
                         }}
                     >
-                        <CardContent className="p-4">
-                            {station.featured_image && station.featured_image !== false ? (
-                                <img
-                                    src={station.featured_image}
-                                    alt={station.title}
-                                    className="w-full h-auto mb-4 rounded"
-                                />
-                            ) : (
-                                <div className="aspect-video bg-gray-200 mb-4 rounded"></div>
-                            )}
-                            <h3 className="font-semibold">{station.title}</h3>
-                            {station.attributes?.map((attr, index) => (
-                                <p key={index} className="text-sm text-gray-600">
-                                    {attr.attribute}: {attr.value}
-                                </p>
-                            ))}
-                        </CardContent>
+                        <CardContent className="p-0">
+                            {/* Image Section */}
+                            <div className="relative">
+                                {station.featured_image && station.featured_image !== false ? (
+                                    <img
+                                        src={station.featured_image}
+                                        alt={station.title}
+                                        className="w-full h-48 object-cover"
+                                    />
+                                ) : (
+                                    <div className="h-48 bg-gradient-to-br from-gray-100 to-gray-200"></div>
+                                )}
+                            </div>
 
+                            {/* Content Section */}
+                            <div className="p-4 space-y-3">
+                                {/* Price Tag (if applicable) */}
+                                {station.pricing && (
+                                    <div className="text-red-600 text-2xl font-bold mb-2">
+                                        {adbridgeData.currency} {station.pricing.daily}/day
+                                    </div>
+                                )}
+
+                                {/* Title */}
+                                <h3 className="font-bold text-lg text-gray-800">
+                                    {station.title}
+                                </h3>
+
+                                {/* Attributes with Enhanced Styling */}
+                                <div className="space-y-2">
+                                    {station.attributes?.map((attr, index) => (
+                                        <div
+                                            key={index}
+                                            className="
+                                    text-sm 
+                                    text-gray-700 
+                                    py-2 
+                                    border-b 
+                                    border-gray-200 
+                                    last:border-b-0
+                                    flex 
+                                    justify-between 
+                                    items-center
+                                    transition-colors
+                                    duration-200
+                                    px-2"
+                                        >
+                                            <span className="font-semibold text-gray-800">{attr.attribute}:</span>
+                                            <span className="text-gray-600">{attr.value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </CardContent>
                     </Card>
                 ))}
             </div>

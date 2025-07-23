@@ -122,8 +122,11 @@ class AdBridge_APIs
                     'price' => (float) get_post_meta($campaign->ID, '_' . $meta_key, true),
                 );
             }
-
-            $attributes = get_post_meta($campaign->ID, '_attributes', true);
+            if ($adrentals_type == 'billboard') {
+                $attributes = get_post_meta($campaign->ID, '_attributes_billboard', true);
+            } else {
+                $attributes = get_post_meta($campaign->ID, '_attributes', true);
+            }
 
             $attrubutes_value = array();
             if (is_array($attributes)) {
@@ -176,8 +179,18 @@ class AdBridge_APIs
                         'cost' =>  $attribute['cost'][0]['value'],
                     );
                 }
-            } else {
-                $acronTerms = [];
+            }
+
+            if (empty($acron_value)) {
+                $acronTerms = carbon_get_theme_option('adbridge_arcon_terms');
+                if (is_array($acronTerms)) {
+                    foreach ($acronTerms as $attribute) {;
+                        $acron_value[] = array(
+                            'name'  => $attribute['title'],
+                            'cost' =>  $attribute['cost'],
+                        );
+                    }
+                }
             }
             // Build the campaign details array
             $campaign_details = array(

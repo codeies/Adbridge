@@ -53,13 +53,14 @@ class Adrental_Serialized_Post_Meta_Datastore extends Datastore
         global $post;
         $key = $this->get_key_for_field($field);
         $value = get_post_meta($post->ID, $key, true);
-        if (empty($value))
-            return [];
-        if (is_array($value))
-            return $value;
-        else
-            return unserialize($value);
+
+        if ($value === '' || $value === false) { // Check both empty and false cases
+            return $field->get_default_value(); // Return the default value
+        }
+
+        return is_array($value) ? $value : unserialize($value);
     }
+
 
     /**
      * Save the field value(s)

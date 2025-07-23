@@ -126,41 +126,83 @@ const BillboardStep = () => {
             {loading ? (
                 <p>Loading billboards...</p>
             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredBillboards.map((billboard) => (
                         <Card
                             key={billboard.id}
-                            className="cursor-pointer hover:bg-gray-50"
+                            className="cursor-pointer 
+                transition-all 
+                duration-300 
+                border-2 
+                border-transparent 
+                hover:border-blue-200"
                             onClick={() => {
-                                //console.log("Billboard selected:", billboard);
                                 setBillboardFilters({ selectedBillboard: billboard });
                                 setCurrentStep(3);
                             }}
                         >
-                            <CardContent className="p-3 md:p-4">
-                                {/* Billboard Image */}
-                                {billboard.featured_image && billboard.featured_image !== false ? (
-                                    <img
-                                        src={billboard.featured_image}
-                                        alt={billboard.title}
-                                        className="w-full h-auto mb-3 md:mb-4 rounded"
-                                    />
-                                ) : (
-                                    <div className="aspect-video bg-gray-200 mb-3 md:mb-4 rounded"></div>
-                                )}
-                                <h3 className="font-semibold text-sm md:text-base">{billboard.name}</h3>
-                                <p className="text-xs md:text-sm text-gray-600">Location: {billboard.location}</p>
-                                <p className="text-xs md:text-sm font-semibold mt-2">{adbridgeData.currency} {billboard.pricing.daily}/day</p>
-                                {console.log(billboard)}
-                                {billboard.attributes?.map((attr, index) => (
-                                    <p key={index} className="text-sm text-gray-600">
-                                        {attr.attribute}: {attr.value}
+                            <CardContent className="p-0">
+                                {/* Image Section with Gradient Overlay */}
+                                <div className="relative">
+                                    {billboard.featured_image && billboard.featured_image !== false ? (
+                                        <img
+                                            src={billboard.featured_image}
+                                            alt={billboard.title}
+                                            className="w-full h-48 object-cover"
+                                        />
+                                    ) : (
+                                        <div className="h-48 bg-gradient-to-br from-gray-100 to-gray-200"></div>
+                                    )}
+                                </div>
+
+                                {/* Content Section */}
+                                <div className="p-4 space-y-3">
+                                    {/* Price Tag */}
+                                    <div className="text-red-600 text-2xl font-bold mb-2">
+                                        {adbridgeData.currency} {billboard.pricing.daily}/day
+                                    </div>
+
+                                    {/* Title */}
+                                    <h3 className="font-bold text-lg text-gray-800">
+                                        {billboard.name}
+                                    </h3>
+
+                                    {/* Location */}
+                                    <p className="text-sm text-gray-600 flex items-center">
+                                        <span className="mr-2 text-blue-500">📍</span>
+                                        <span className="font-medium">Location:</span> {billboard.location}
                                     </p>
-                                ))}
+
+                                    {/* Attributes with Enhanced Styling */}
+                                    <div className="space-y-2">
+                                        {billboard.attributes?.map((attr, index) => (
+                                            <div
+                                                key={index}
+                                                className="
+                                    text-sm 
+                                    text-gray-700 
+                                    py-2 
+                                    border-b 
+                                    border-gray-200 
+                                    last:border-b-0
+                                    flex 
+                                    justify-between 
+                                    items-center
+                                    transition-colors
+                                    duration-200
+                                    px-2"
+                                            >
+                                                <span className="font-semibold text-gray-800">{attr.attribute}:</span>
+                                                <span className="text-gray-600">{attr.value}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </CardContent>
                         </Card>
                     ))}
                 </div>
+
             )}
         </div>
     );
